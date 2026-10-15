@@ -285,6 +285,7 @@
         <div class="grp">Línies <div class="seg" id="lines"></div></div>
         <div class="grp">Posició <div class="seg" id="pos"></div></div>
         <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
+        <div class="grp" title="Com es mou el text. Clàssic: línia a línia (el de sempre). Suau: les paraules entren una a una i el bloc puja lliscant. Es canvia en calent, sense reiniciar">Moviment <div class="seg" id="motion"></div></div>
         <label class="switch"><input type="checkbox" id="showSrc"><span></span>original</label>
         <label class="switch"><input type="checkbox" id="showSpeaker"><span></span>ponent</label>
         <label class="switch" title="Les marques EN / ES al costat de cada llengua"><input type="checkbox" id="showTags"><span></span>indicadors d’idioma (EN/ES)</label>
@@ -767,6 +768,8 @@ seg('lines', [[1, '1'], [2, '2'], [3, '3']], 'lines');
 seg('pos', [['bottom', 'Baix'], ['center', 'Mig'], ['top', 'Dalt']], 'pos');
 if (prefs.display.dwell == null) prefs.display.dwell = 2.5;
 seg('dwell', [[1.5, 'Àgil'], [2.5, 'Normal'], [3.5, 'Pausada']], 'dwell');
+if (prefs.display.motion !== 'smooth') prefs.display.motion = 'classic';
+seg('motion', [['classic', 'Clàssic'], ['smooth', 'Suau']], 'motion');
 $('size').value = prefs.display.size;
 $('size').oninput = () => { prefs.display.size = Number($('size').value); saveDisplay(); };
 for (const [id, key] of [['showSrc', 'src'], ['showSpeaker', 'speaker'], ['showTags', 'tags']]) {
