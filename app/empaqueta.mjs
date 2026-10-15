@@ -2,6 +2,7 @@
 // La clau, el guió i les sessions NO hi van: viuen a ~/Documents/Subtitols-IMESDE.
 import { packager } from '@electron/packager';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +12,8 @@ const [out] = await packager({
   name: 'Subtítols IMESDE',
   executableName: 'Subtitols IMESDE',
   appBundleId: 'cat.imesde.subtitols',
-  appVersion: '1.0.0',
+  // la versió de package.json: la carcassa la fa servir per saber quines actualitzacions pot fer anar
+  appVersion: JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version,
   platform: 'darwin',
   arch: process.arch,
   icon: path.join(ROOT, 'app', 'Subtitols.icns'),

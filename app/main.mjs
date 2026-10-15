@@ -396,6 +396,8 @@ function buildMenu() {
 
 // ─── Arrencada ───────────────────────────────────────────────────────────────
 async function ensureKey() {
+  // Només proves de l'actualitzador: clau per l'entorn, sense tocar el Clauer
+  if (process.env.SUBTITOLS_UPDATE_TEST && process.env.OPENAI_API_KEY) { apiKey = process.env.OPENAI_API_KEY; return true; }
   migrateEnv();
   apiKey = readKey();
   while (!apiKey) {
