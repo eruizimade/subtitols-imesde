@@ -26,6 +26,23 @@ La manera recomanada d'usar-la. És el mateix servidor de sempre, embolcallat:
 
 Pla B: si l'app no arrenca, tanca-la i fes servir `npm run acte` com sempre (no poden anar alhora: el port és el mateix).
 
+## Actualitzacions (des de GitHub)
+
+Repositori públic: <https://github.com/eruizimade/subtitols-imesde> (només codi: cap clau, cap guió,
+cap material de clients). Branca principal: **`estable`**.
+
+**A l'app**: en obrir-se mira si hi ha una versió nova i pregunta; també menú → «Comprovar
+actualitzacions…». Mai s'actualitza amb els subtítols en marxa. Només es baixa el **codi** (servidor,
+panell, pantalla) i se'n comprova la suma SHA-256: la clau (al Clauer), el guió, les tipografies i les
+sessions **no es toquen**, i macOS no torna a demanar permisos. Si la versió nova no arrenca, l'app torna
+sola a l'anterior (i al menú hi ha «Tornar a la versió anterior»).
+
+**Publicar una versió** (des d'aquesta carpeta):
+1. Canvia el codi, puja `version` a `package.json` (i `shellMin` si has canviat `app/` de manera que
+   les apps velles no ho puguin fer anar: aquelles hauran de reinstal·lar l'app sencera).
+2. `git commit` i `git push origin estable`.
+3. `npm run publica -- "Què canvia"` → fa la release a GitHub amb el codi i l'app sencera.
+
 ## ⚠ El dia de l'acte
 
 0. **Guió** (si n'hi ha): prepara'l ABANS d'arrencar (vegeu «Guió de l'acte» més avall). El panell,

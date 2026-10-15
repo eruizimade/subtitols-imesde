@@ -150,11 +150,13 @@ function startServer() {
     if (restarts.length >= 3 && !code.current().bundled) {
       const back = code.rollback();
       restarts.length = 0;
-      dialog.showMessageBox({ type: 'warning', title: NAME, message: 'La versió nova no arrencava: s’ha tornat a l’anterior', detail: `Ara funciona la ${back.version}.` });
+      // L'avís DESPRÉS de programar el reinici: un diàleg de macOS pot aturar-ho tot fins que algú el contesta
+      setTimeout(() => box(panel, { type: 'warning', title: NAME, message: 'La versió nova no arrencava: s’ha tornat a l’anterior', detail: `Ara funciona la ${back.version}.` }), 3000);
     }
     if (restarts.length > 5) {
-      dialog.showMessageBox({ type: 'error', title: NAME, message: 'El servidor no s’aguanta engegat', detail: `S’ha aturat ${restarts.length} vegades en un minut. Mira ${LOG_FILE}.\nEs continua intentant cada 10 s.` });
       setTimeout(() => { if (!quitting && !server) server = startServer(); }, 10000);
+      const n = restarts.length;
+      setTimeout(() => box(panel, { type: 'error', title: NAME, message: 'El servidor no s’aguanta engegat', detail: `S’ha aturat ${n} vegades en un minut. Mira ${LOG_FILE}.\nEs continua intentant cada 10 s.` }), 0);
     } else setTimeout(() => { if (!quitting && !server) server = startServer(); }, 1000);
   });
   log(`▶ servidor engegat (codi ${cur.version}${cur.bundled ? ', de sèrie' : ''})`);
@@ -270,7 +272,12 @@ async function removeScript() {
 // ─── Actualitzacions ─────────────────────────────────────────────────────────
 // SUBTITOLS_UPDATE_TEST=1 (només proves): accepta sense preguntar i els avisos van al registre
 const UPDATE_TEST = !!process.env.SUBTITOLS_UPDATE_TEST;
-const box = (win, opts) => (UPDATE_TEST ? (log(`[diàleg] ${opts.message}${opts.detail ? ' · ' + opts.detail : ''}`), Promise.resolve({ response: 0 })) : dialog.showMessageBox(win, opts));
+function box(win, opts) {
+  if (UPDATE_TEST) { log(`[diàleg] ${opts.message}${opts.detail ? ' · ' + opts.detail : ''}`); return Promise.resolve({ response: 0 }); }
+  // sense finestra (o ja tancada): diàleg solt. Mai no ha de poder interrompre qui el crida.
+  try { return win && !win.isDestroyed() ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts); }
+  catch (e) { log('· diàleg:', e.message); return Promise.resolve({ response: opts.cancelId ?? 1 }); }
+}
 function restartServer() {
   if (!server) { startServerIfIdle(); return; }
   restarting = true;
