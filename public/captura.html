@@ -17,6 +17,7 @@
     --font: "DM Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; } /* si no, .btn (display:inline-flex) mana sobre l'atribut hidden */
   html, body { margin: 0; background: var(--cream); color: var(--ink); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
   ::selection { background: var(--green); }
   button, input, select, textarea { font: inherit; color: inherit; }
@@ -281,7 +282,8 @@ let lastStart = null;
 function send(o) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
 function sendConfig() { send({ type: 'config', config: configPayload() }); }
 function configPayload() {
-  return { mode: prefs.mode, sourceLang: prefs.sourceLang, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto') };
+  return { mode: prefs.mode, sourceLang: prefs.sourceLang, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
+    input: isNative() && nativeInfo() ? { native: nativeInfo().uid, name: nativeInfo().name, channels: nativeInfo().channels } : null };
 }
 function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets } }); }
 
@@ -328,6 +330,16 @@ function onState(s) {
   if (s.bootId) lastBoot = s.bootId;
   if (s.running) { stoppedBySelf = false; stoppedAlarm = 0; }
   lastState = s;
+  if (s.native?.active) {
+    if (s.native.lastAt) lastFrameAt = performance.now() - Math.max(0, s.now - s.native.lastAt);
+    const lv = s.native.levels || [];
+    $('lvl').style.width = Math.min(100, Math.sqrt(Math.max(0, ...lv)) * 260) + '%';
+    document.querySelectorAll('.sp').forEach((row, i) => {
+      row.querySelector('.meter i').style.width = Math.min(100, Math.sqrt(lv[i] || 0) * 260) + '%';
+      row.classList.toggle('active', s.native.speaker === i && (lv[i] || 0) > 0.004);
+    });
+    if (!sending && s.running) { sending = true; sendingSince = Date.now(); } // la captura la fa el servidor: el panell la controla igualment
+  }
   if (Array.isArray(s.fonts) && JSON.stringify(s.fonts) !== fontsKnown) renderFonts(s.fonts);
   if (s.display && typeof s.display.hidden === 'boolean' && $('hideScreen').checked !== s.display.hidden) { $('hideScreen').checked = s.display.hidden; prefs.display.hidden = s.display.hidden; syncHideBtn(); }
   running = s.running;
@@ -367,7 +379,8 @@ function health() {
   if (!connected && now - pageLoadedAt > 3000) red = 'Servidor desconnectat <small>Mira el Terminal on corre el servidor. Es reconnecta sol.</small>';
   else if (lastState?.fatal) red = esc(lastState.fatal) + ' <small>Sense això no surt cap subtítol</small>';
   else if (stoppedAlarm) red = 'La sessió s’ha aturat <small>Prem «Començar» per tornar-hi</small>';
-  else if (sending && ctx?.state && ctx.state !== 'running') red = 'Àudio aturat pel navegador <small>Clica en qualsevol lloc de la pàgina</small>';
+  else if (sending && !isNative() && ctx?.state && ctx.state !== 'running') red = 'Àudio aturat pel navegador <small>Clica en qualsevol lloc de la pàgina</small>';
+  else if (sending && lastState?.native?.active && lastState.native.error) red = 'La targeta multicanal no envia àudio <small>' + esc(lastState.native.error) + '</small>';
   else if (sending && now - sendingSince > 2500 && performance.now() - lastFrameAt > 1500) red = 'No arriba àudio de l’entrada <small>Comprova la targeta / el cable. Es reintenta sola.</small>';
   else if (upstreamDownSince && now - upstreamDownSince > 4000) red = 'Sense connexió amb OpenAI <small>Comprova internet. Es reconnecta sola i l’àudio es guarda uns segons.</small>';
   else if (running && lastState?.display?.hidden) amber = 'La pantalla està AMAGADA <small>Desmarca «amagar pantalla» quan torni a parlar algú</small>';
@@ -492,11 +505,30 @@ $('speakers').addEventListener('click', (e) => {
 
 // ─── Àudio ───
 let ctx, node, micSrc, stream, fileSrc, sending = false;
+// Entrades: les del navegador (com sempre, màx. 2 canals) i, a part, les de la CAPTURA NATIVA, que en
+// llegeix tots els canals (targetes multicanal, Dante Virtual Soundcard…). Valor «native:<uid>».
+let nativeDevs = [];
+const isNative = () => String(prefs.device || '').startsWith('native:');
+const nativeInfo = () => nativeDevs.find((d) => 'native:' + d.uid === prefs.device) || null;
 async function listDevices() {
-  const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
-  if (!devs.some((d) => d.label)) return;
-  $('device').innerHTML = devs.map((d) => `<option value="${d.deviceId}">${esc(d.label)}</option>`).join('');
-  if (devs.some((d) => d.deviceId === prefs.device)) $('device').value = prefs.device;
+  const devs = (await navigator.mediaDevices.enumerateDevices().catch(() => [])).filter((d) => d.kind === 'audioinput');
+  try { const r = await (await fetch('/native/devices')).json(); if (r.ok) nativeDevs = r.devices; } catch {}
+  if (!devs.some((d) => d.label) && !nativeDevs.length) return;
+  $('device').innerHTML =
+    (devs.some((d) => d.label) ? `<optgroup label="Navegador (fins a 2 canals)">${devs.map((d) => `<option value="${d.deviceId}">${esc(d.label)}</option>`).join('')}</optgroup>` : '') +
+    (nativeDevs.length ? `<optgroup label="Multicanal (captura nativa)">${nativeDevs.map((d) => `<option value="native:${esc(d.uid)}">${esc(d.name)} · ${d.channels} ${d.channels === 1 ? 'canal' : 'canals'}</option>`).join('')}</optgroup>` : '');
+  if ([...$('device').options].some((o) => o.value === prefs.device)) $('device').value = prefs.device;
+}
+// Entrada multicanal triada: el navegador no captura res (ho fa el servidor); el panell només en mostra l'estat
+function armNative() {
+  const d = nativeInfo();
+  if (!d) throw new Error('la targeta multicanal no hi és');
+  stream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+  stream = null; micSrc?.disconnect(); micSrc = null;
+  channelCount = d.channels;
+  $('inputHint').textContent = `${d.name} · ${d.channels} ${d.channels === 1 ? 'canal' : 'canals'} · captura nativa (multicanal)`;
+  $('arm').textContent = 'Entrada multicanal ✓';
+  renderSpeakers();
 }
 async function ensureContext() {
   if (ctx) { if (ctx.state === 'suspended') await ctx.resume(); return; }
@@ -524,6 +556,7 @@ let armChain = Promise.resolve();
 function armMic(opts) { const p = armChain.then(() => armMicNow(opts)); armChain = p.catch(() => {}); return p; }
 let missingWarned = false;
 async function armMicNow(opts = {}) {
+  if (isNative()) return armNative();
   await ensureContext();
   stream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
   micSrc?.disconnect();
@@ -551,7 +584,11 @@ async function armMicNow(opts = {}) {
 $('enhance').checked = prefs.enhance;
 $('enhance').onchange = () => { prefs.enhance = $('enhance').checked; save('enhance', prefs.enhance); if (stream) armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message)); };
 $('arm').onclick = () => armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message));
-$('device').onchange = () => { prefs.device = $('device').value; save('device', prefs.device); if (stream) armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message)); };
+$('device').onchange = () => {
+  prefs.device = $('device').value; save('device', prefs.device);
+  if (stream || isNative() || sending) armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message));
+  if (sending) sendConfig(); // en directe: el servidor canvia d'entrada (natiu ↔ navegador)
+};
 let reArmT = 0, reArmDelay = 2000;
 function reArm() {
   if (reArmT || fileSrc) return;
@@ -569,7 +606,7 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
 });
 // Vigilant de l'entrada: si fa 3 s que no arriba àudio mentre s'envia, es reprèn el context o es reobre l'entrada
 setInterval(() => {
-  if (!sending || fileSrc || !lastFrameAt || performance.now() - lastFrameAt < 3000) return;
+  if (!sending || fileSrc || isNative() || !lastFrameAt || performance.now() - lastFrameAt < 3000) return;
   if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
   else reArm();
 }, 1000);
@@ -580,7 +617,7 @@ document.addEventListener('visibilitychange', () => { keepAwake(); if (ctx && ct
 document.addEventListener('click', () => { keepAwake(); if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {}); });
 keepAwake();
 navigator.permissions?.query({ name: 'microphone' }).then((p) => { if (p.state === 'granted') listDevices(); }).catch(() => {});
-listDevices().catch(() => {});
+listDevices().then(() => { if (isNative()) { try { armNative(); } catch {} } }).catch(() => {});
 
 function startSending() {
   stoppedAlarm = 0;

@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
+import { createNative, listDevices } from './nadiu.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 // DATA_DIR: on viuen .env, guio.json i sessions/. Per defecte, aquesta carpeta (com sempre); l'app
@@ -125,6 +126,7 @@ function broadcast() {
       fatal: state.fatal || null,
       bootId: BOOT_ID,
       fonts: fontList,
+      native: native ? { active: native.status.active, name: native.status.name, uid: native.status.uid, channels: native.status.channels, levels: native.status.levels.map((v) => Math.round(v * 1e4) / 1e4), speaker: native.status.speaker, lastAt: native.status.lastAt, error: native.status.error } : null,
       guio: guio ? { from: guio.from || 'guio.json', n: guio.segments.length, made: guio.made || guio.revised || null } : null,
     };
     const shared = JSON.stringify(base);
@@ -502,6 +504,23 @@ function openStt() {
   return ws;
 }
 
+// ─── Captura multicanal nativa (bin/captura): sense el límit de 2 canals de Chrome ───
+// Quan és activa, l'àudio el «posseeix» el servidor (NATIVE_OWNER), no cap panell: si el panell es tanca
+// o es penja, l'àudio continua entrant.
+const CAPTURA_BIN = process.env.SUBTITOLS_CAPTURA || path.join(DIR, 'bin', 'captura');
+const NATIVE_OWNER = { native: true };
+const native = createNative({ bin: CAPTURA_BIN, onFrame: (f) => onAudio(f, NATIVE_OWNER), onStatus: () => broadcast(), log: (t) => console.log(t) });
+function applyInput() {
+  const inp = state.config.input;
+  if (state.running && inp?.native) {
+    native.start(inp.native, inp.name, inp.channels, state.config.speakerChannels);
+    audioOwner = NATIVE_OWNER;
+  } else {
+    if (native.status.active) native.stop();
+    if (audioOwner === NATIVE_OWNER) audioOwner = null;
+  }
+}
+
 function start(cfg) {
   stop();
   Object.assign(state.config, sanitizeConfig(cfg));
@@ -525,6 +544,7 @@ function start(cfg) {
   wav = openWav(logFile.replace(/\.jsonl$/, '.wav'));
   lastSpeech = Date.now();
   upstream = openStt();
+  applyInput();
   console.log(`▶ inici · ${state.config.targets.join('/')} · registre: sessions/${path.basename(logFile)}`);
   broadcast();
 }
@@ -532,6 +552,7 @@ function start(cfg) {
 function stop() {
   if (!state.running) return;
   state.running = false;
+  applyInput();
   const ws = upstream;
   upstream = null;
   try { ws?.close(); } catch {}
@@ -549,6 +570,9 @@ function sanitizeConfig(c = {}) {
   if (Array.isArray(c.targets)) out.targets = c.targets.filter((t) => typeof t === 'string').slice(0, 6);
   if (typeof c.prompt === 'string') out.prompt = c.prompt.slice(0, 1500);
   if (Array.isArray(c.speakers)) out.speakers = c.speakers.map((s) => String(s || '').slice(0, 60));
+  if (Array.isArray(c.speakerChannels)) out.speakerChannels = c.speakerChannels.map((n) => Math.max(0, Math.min(63, Number(n) | 0))).slice(0, 16);
+  if ('input' in c) out.input = c.input && typeof c.input.native === 'string' && c.input.native.length < 300
+    ? { native: c.input.native, name: String(c.input.name || '').slice(0, 120), channels: Number(c.input.channels) | 0 } : null;
   if (Array.isArray(c.speakerLangs)) out.speakerLangs = c.speakerLangs.map((l) => (typeof l === 'string' && (l === 'auto' || LANG_NAMES[l]) ? l : 'auto')).slice(0, 16);
   return out;
 }
@@ -558,7 +582,7 @@ function onAudio(buf, from) {
   // Si ningú no té l'àudio (el panell s'ha reconnectat després d'un tall de xarxa o d'adormir-se),
   // el primer panell que n'envia se'l queda. Abans el servidor el llençava en silenci, el panell
   // seguia dient «en directe» i als 2 minuts la sessió s'aturava sola.
-  if (state.running && !audioOwner && operators.has(from)) { audioOwner = from; noOperatorSince = 0; broadcast(); }
+  if (state.running && !audioOwner && operators.has(from) && !native.status.active) { audioOwner = from; noOperatorSince = 0; broadcast(); }
   if (!state.running || buf.length < 3 || from !== audioOwner) return;
   const sp = buf[0];
   const pcm = buf.subarray(1);
@@ -760,6 +784,9 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ running: state.running, version: CODE_VERSION, lan: lanUrls(), modes: Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.label])), models: { TRANSLATE_MODEL } }));
   }
   if (url.pathname.startsWith('/fonts/')) return handleFonts(req, res, url);
+  if (url.pathname === '/native/devices') {
+    return listDevices(CAPTURA_BIN).then((r) => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(r)); });
+  }
   const brand = url.pathname.match(/^\/brand\/([\w-]+\.png)$/);
   const file = brand ? `brand/${brand[1]}` : FILES[url.pathname];
   if (!file || !fs.existsSync(path.join(DIR, 'public', file))) { res.writeHead(404); return res.end('no'); }
@@ -784,12 +811,15 @@ wss.on('connection', (ws, req) => {
     let msg;
     try { msg = JSON.parse(data.toString()); } catch { return; }
     if (msg.type === 'start') { audioOwner = ws; start(msg.config); }
-    else if (msg.type === 'claim') { if (state.running) { audioOwner = ws; noOperatorSince = 0; broadcast(); } }
+    else if (msg.type === 'claim') { if (state.running && !native.status.active) { audioOwner = ws; noOperatorSince = 0; broadcast(); } }
     else if (msg.type === 'stop') stop();
     else if (msg.type === 'clear') { blocks = []; open = null; broadcast(); }
     else if (msg.type === 'config') {
       const before = JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs]);
+      const wasInput = JSON.stringify(state.config.input || null);
       Object.assign(state.config, sanitizeConfig(msg.config));
+      native.setSpeakers(state.config.speakerChannels);
+      if (state.running && JSON.stringify(state.config.input || null) !== wasInput) applyInput(); // canvi d'entrada en directe
       // El context, l'idioma i el mode s'envien a OpenAI en obrir la sessió: si canvien en directe, es renova
       if (state.running && before !== JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs])) {
         pendingCfgRotate ||= Date.now(); // a la pròxima pausa (o en 20 s), no a mitja frase

@@ -9,3 +9,5 @@ guio-*/
 ACTE-*.md
 proves/*.wav
 .DS_Store
+# es compila en empaquetar/publicar (npm run nadiu)
+bin

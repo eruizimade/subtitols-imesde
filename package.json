@@ -1,6 +1,6 @@
 {
   "name": "subtitols-imesde",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Subtítols en directe (OpenAI) · IMESDE",
   "main": "app/main.mjs",
   "scripts": {
@@ -11,7 +11,8 @@
     "resistencia": "node proves/resistencia.mjs",
     "app": "electron .",
     "empaqueta": "node app/empaqueta.mjs",
-    "publica": "node app/publica.mjs"
+    "publica": "node app/publica.mjs",
+    "nadiu": "mkdir -p bin && swiftc -O nadiu/captura.swift -o bin/captura"
   },
   "keywords": [],
   "author": "",

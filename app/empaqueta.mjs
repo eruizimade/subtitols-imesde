@@ -7,6 +7,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// El programa de captura multicanal nativa (Swift) es compila aquí: no va al repositori
+fs.mkdirSync(path.join(ROOT, 'bin'), { recursive: true });
+execFileSync('swiftc', ['-O', path.join(ROOT, 'nadiu', 'captura.swift'), '-o', path.join(ROOT, 'bin', 'captura')], { stdio: 'inherit' });
+
 const [out] = await packager({
   dir: ROOT,
   name: 'Subtítols IMESDE',

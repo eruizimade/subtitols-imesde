@@ -26,6 +26,15 @@ La manera recomanada d'usar-la. És el mateix servidor de sempre, embolcallat:
 
 Pla B: si l'app no arrenca, tanca-la i fes servir `npm run acte` com sempre (no poden anar alhora: el port és el mateix).
 
+## Multicanal (fins a 8 ponents o més)
+
+Chrome (i per tant el panell) només captura **2 canals** de qualsevol targeta. Per a més canals, a
+«01 Entrada» tria una targeta del grup **«Multicanal (captura nativa)»**: la llegeix un programa natiu de
+macOS (`bin/captura`, font a `nadiu/captura.swift`) amb tots els canals (targeta física, Dante Virtual
+Soundcard, Loopback, BlackHole…). A «04 Ponents», cada ponent al seu canal i, si vols, amb el seu idioma.
+La captura la fa el servidor: si el panell es tanca o es penja, l'àudio continua entrant; si la targeta
+desapareix, es reintenta sola.
+
 ## Actualitzacions (des de GitHub)
 
 Repositori públic: <https://github.com/eruizimade/subtitols-imesde> (només codi: cap clau, cap guió,
