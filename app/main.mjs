@@ -28,6 +28,8 @@ const LOG_FILE = path.join(DATA_DIR, 'app.log');
 const NAME = 'Subtítols IMESDE';
 
 app.setName(NAME);
+// Només proves: una segona instància aïllada (carpeta pròpia) que no topa amb l'app instal·lada
+if (process.env.SUBTITOLS_USERDATA) app.setPath('userData', process.env.SUBTITOLS_USERDATA);
 
 // Proves: àudio d'un fitxer com si fos el micròfon, i control remot per CDP. Mai en un ús normal.
 if (process.env.SUBTITOLS_FAKE_AUDIO) {
@@ -204,36 +206,64 @@ function createPanel() {
 }
 
 function externalDisplay() {
+  // Només proves: una «pantalla externa» simulada, petita, sobre el portàtil
+  if (process.env.SUBTITOLS_FAKE_EXTERNAL) return { id: -1, bounds: { x: 80, y: 80, width: 480, height: 270 }, size: { width: 480, height: 270 } };
   const primary = screen.getPrimaryDisplay();
   return screen.getAllDisplays().find((d) => d.id !== primary.id) || null;
 }
 
+// Pantalla del públic. A la pantalla EXTERNA no fa servir la pantalla completa de macOS (que crea un
+// escriptori/Space propi i, segons com estigui configurat el Mac, desapareix del projector quan es canvia
+// d'escriptori a la pantalla 1): és una finestra sense vores que la cobreix sencera, visible a TOTS els
+// escriptoris i per sobre de tot (barra de menús, Dock, avisos). Sense pantalla externa, una finestra normal.
+let screenMode = null; // 'projeccio' | 'finestra'
+let forceWindow = false;
+function wantedMode() { return externalDisplay() && !forceWindow ? 'projeccio' : 'finestra'; }
+
+function createScreenWindow(mode) {
+  const proj = mode === 'projeccio';
+  const win = new BrowserWindow({
+    width: 1280, height: 720, title: `${NAME} · pantalla`, backgroundColor: '#000', autoHideMenuBar: true, show: false,
+    ...(proj ? { frame: false, fullscreenable: false, resizable: false, movable: false, minimizable: false, hasShadow: false,
+                 roundedCorners: false, enableLargerThanScreen: true, skipTaskbar: true } : {}),
+    webPreferences,
+  });
+  const load = () => win.loadURL(`${BASE}/pantalla`);
+  load();
+  selfHeal(win, load);
+  win.on('closed', () => { if (screenWin === win) { screenWin = null; screenMode = null; } });
+  return win;
+}
+
 function placeScreen() {
   if (!screenWin || screenWin.isDestroyed()) return;
-  const ext = externalDisplay();
-  if (ext) {
-    if (screenWin.isFullScreen()) screenWin.setFullScreen(false);
+  const mode = wantedMode();
+  if (mode !== screenMode) { // canvia de tipus de finestra: es refà (una finestra no pot canviar de vores)
+    const old = screenWin;
+    screenWin = createScreenWindow(mode);
+    screenMode = mode;
+    try { old.destroy(); } catch {}
+  }
+  if (mode === 'projeccio') {
+    const ext = externalDisplay();
+    screenWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    screenWin.setAlwaysOnTop(true, 'screen-saver');
     screenWin.setBounds(ext.bounds);
-    setTimeout(() => { if (!screenWin?.isDestroyed()) screenWin.setFullScreen(true); }, 300);
-    log(`▣ pantalla a la sortida externa (${ext.size.width}×${ext.size.height})`);
+    screenWin.showInactive(); // sense prendre el focus al panell
+    log(`▣ pantalla projectada a la sortida externa (${ext.size.width}×${ext.size.height}), a tots els escriptoris` +
+      ` [sobre tot: ${screenWin.isAlwaysOnTop()} · tots els escriptoris: ${screenWin.isVisibleOnAllWorkspaces()} · pantalla completa macOS: ${screenWin.isFullScreen()}]`);
   } else {
-    if (screenWin.isFullScreen()) screenWin.setFullScreen(false);
     const b = screen.getPrimaryDisplay().workArea;
     screenWin.setBounds({ x: b.x + 60, y: b.y + 60, width: 1280, height: 720 });
-    log('▣ sense pantalla externa: la pantalla en una finestra');
+    screenWin.show();
+    log('▣ pantalla en una finestra (sense pantalla externa o forçat)');
   }
 }
 
 function openScreen() {
-  if (screenWin && !screenWin.isDestroyed()) { placeScreen(); screenWin.show(); return; }
-  screenWin = new BrowserWindow({ width: 1280, height: 720, title: `${NAME} · pantalla`, backgroundColor: '#000', autoHideMenuBar: true, webPreferences });
-  const load = () => screenWin.loadURL(`${BASE}/pantalla`);
-  load();
-  selfHeal(screenWin, load);
-  screenWin.on('closed', () => { screenWin = null; });
+  if (!screenWin || screenWin.isDestroyed()) { screenMode = wantedMode(); screenWin = createScreenWindow(screenMode); }
   placeScreen();
 }
-
 
 async function confirmQuit() {
   const running = await isRunning();
@@ -381,7 +411,7 @@ function buildMenu() {
     { label: 'Pantalla', submenu: [
       { label: 'Obrir la pantalla del públic', accelerator: 'Cmd+P', click: openScreen },
       { label: 'Tornar-la a la pantalla externa', accelerator: 'Cmd+Shift+P', click: placeScreen },
-      { label: 'Pantalla completa (sí/no)', accelerator: 'Cmd+Shift+F', click: () => screenWin && !screenWin.isDestroyed() && screenWin.setFullScreen(!screenWin.isFullScreen()) },
+      { label: 'Projectar / finestra (sí/no)', accelerator: 'Cmd+Shift+F', click: () => { forceWindow = !forceWindow; if (screenWin && !screenWin.isDestroyed()) placeScreen(); } },
       { label: 'Tancar la pantalla del públic', click: () => screenWin && !screenWin.isDestroyed() && screenWin.close() },
     ] },
     { label: 'Visualització', submenu: [
