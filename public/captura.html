@@ -244,8 +244,8 @@
         <div class="grp" title="On queden els subtítols dins la sortida (en % de l’amplada i l’alçada)">Àrea
           <span class="area">esq. <input type="range" id="areaL" min="0" max="45" step="0.5"></span>
           <span class="area">dreta <input type="range" id="areaR" min="0" max="45" step="0.5"></span>
-          <span class="area" id="areaVWrap">vora <input type="range" id="areaV" min="0" max="80" step="0.5"></span>
-          <span class="area" id="areaCWrap">amunt/avall <input type="range" id="areaC" min="-45" max="45" step="0.5"></span>
+          <span class="area">dalt <input type="range" id="areaT" min="0" max="80" step="0.5"></span>
+          <span class="area">baix <input type="range" id="areaB" min="0" max="80" step="0.5"></span>
           <button class="btn btn-ghost btn-sm" id="areaReset">Per defecte</button>
         </div>
         <label class="switch" title="Dibuixa a la sortida el requadre que ocupen els subtítols, per encaixar-lo al muntatge (recorda apagar-ho abans de l’acte)"><input type="checkbox" id="areaGuide"><span></span><b>marcar l’àrea a la sortida</b></label>
@@ -781,15 +781,12 @@ renderLangColors();
 setInterval(() => { const sig = JSON.stringify([prefs.display.src, prefs.targets, prefs.display.colorize]); if (sig !== renderLangColors.sig) { renderLangColors.sig = sig; renderLangColors(); } }, 1000);
 
 // ─── Àrea dels subtítols dins la sortida ───
-const AREA_DEF = { l: 5, r: 5, v: 6, c: 0 };
+const AREA_DEF = { l: 5, r: 5, t: 6, b: 6 };
 function renderArea() {
   const a = { ...AREA_DEF, ...(prefs.display.area || {}) };
-  for (const k of ['l', 'r', 'v', 'c']) $('area' + k.toUpperCase()).value = a[k];
-  const mid = prefs.display.pos === 'center';
-  $('areaVWrap').hidden = mid; $('areaCWrap').hidden = !mid;
-  $('areaV').parentElement.firstChild.textContent = prefs.display.pos === 'top' ? 'dalt ' : 'baix ';
+  for (const k of ['l', 'r', 't', 'b']) $('area' + k.toUpperCase()).value = a[k];
 }
-for (const k of ['l', 'r', 'v', 'c']) $('area' + k.toUpperCase()).oninput = () => {
+for (const k of ['l', 'r', 't', 'b']) $('area' + k.toUpperCase()).oninput = () => {
   prefs.display.area = { ...AREA_DEF, ...(prefs.display.area || {}), [k]: Number($('area' + k.toUpperCase()).value) }; saveDisplay();
 };
 $('areaReset').onclick = () => { prefs.display.area = { ...AREA_DEF }; renderArea(); saveDisplay(); };

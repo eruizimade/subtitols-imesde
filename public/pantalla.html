@@ -39,10 +39,10 @@
 
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; font-family: var(--font); }
   body:not(.embed) { cursor: none; }
-  .stage { position: absolute; left: var(--ml, 5vw); right: var(--mr, 5vw); bottom: var(--mv, 6vh); display: flex; flex-direction: column; gap: calc(var(--size) * .45); transition: opacity .8s ease; }
-  [data-pos="center"] .stage { bottom: auto; top: 50%; transform: translateY(-50%); }
-  [data-pos="top"] .stage { bottom: auto; top: var(--mv, 6vh); }
-  [data-pos="center"] .stage { margin-top: var(--cv, 0); }
+  .stage { position: absolute; left: var(--ml, 5vw); right: var(--mr, 5vw); top: var(--mt, 6vh); bottom: var(--mb, 6vh); display: flex; flex-direction: column; justify-content: flex-end; gap: calc(var(--size) * .45); transition: opacity .8s ease; }
+  /* L'àrea és un requadre (marges esquerre, dret, dalt i baix); la posició diu on s'enganxa el text a dins */
+  [data-pos="center"] .stage { justify-content: center; }
+  [data-pos="top"] .stage { justify-content: flex-start; }
   /* Guia per situar l'àrea a la sortida (muntatge): el requadre que ocupen els subtítols, sempre a la vista */
   [data-guide] .stage { opacity: 1 !important; outline: max(2px, .15vw) dashed var(--fg); outline-offset: .6vw; }
   [data-guide] .stage::before { content: 'ÀREA DELS SUBTÍTOLS'; position: absolute; left: -.6vw; top: -.6vw; transform: translateY(-100%);
@@ -121,8 +121,10 @@
     const area = cfg.area || {};
     root.style.setProperty('--ml', pct(area.l, 5, 0, 45) + 'vw');
     root.style.setProperty('--mr', pct(area.r, 5, 0, 45) + 'vw');
-    root.style.setProperty('--mv', pct(area.v, 6, 0, 80) + 'vh');
-    root.style.setProperty('--cv', pct(area.c, 0, -45, 45) + 'vh');
+    let mt = pct(area.t, 6, 0, 80), mb = pct(area.b, 6, 0, 80);
+    if (mt + mb > 85) mb = Math.max(0, 85 - mt); // sempre queda lloc per al text
+    root.style.setProperty('--mt', mt + 'vh');
+    root.style.setProperty('--mb', mb + 'vh');
     if (cfg.guide) root.dataset.guide = ''; else delete root.dataset.guide;
     const rg = Number(cfg.rowGap);
     root.style.setProperty('--rowgap', rg >= 0 && rg <= 6 ? String(rg) : '1');
