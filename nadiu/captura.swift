@@ -2,6 +2,7 @@
 // aquest programa en llegeix tots (targeta física o virtual: Dante Virtual Soundcard, Loopback, BlackHole…).
 //
 //   captura llista                 → JSON: [{ "uid", "name", "channels" }] de les entrades
+//   captura pdf <fitxer>           → el text d'un PDF (per preparar guions des de l'app)
 //   captura <uid> <c0,c1,...>      → llegeix els canals indicats (0 = primer) i escriu a stdout, bloc a bloc:
 //        "CAP1" | u32 frames | u16 canals | u32 freqüència | Float32 entrellaçat (canals × frames)
 //
@@ -9,6 +10,7 @@
 // i llegir-ne tots els canals. El servidor fa la resta (24 kHz, qui parla, OpenAI). Si el dispositiu
 // desapareix o canvia, el programa surt i el servidor el torna a engegar.
 import AudioToolbox
+import PDFKit
 import CoreAudio
 import Foundation
 
@@ -48,6 +50,14 @@ func nominalRate(_ id: AudioDeviceID) -> Double {
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let cmd = args.first else { fail("ús: captura llista | captura <uid> <canals>") }
+
+if cmd == "pdf" {
+    guard args.count > 1, let doc = PDFDocument(url: URL(fileURLWithPath: args[1])) else { fail("no es pot obrir el PDF") }
+    var out = ""
+    for i in 0..<doc.pageCount { if let t = doc.page(at: i)?.string { out += t + "\n\n" } }
+    FileHandle.standardOutput.write(out.data(using: .utf8)!)
+    exit(0)
+}
 
 if cmd == "llista" {
     let list = allDevices().compactMap { d -> [String: Any]? in

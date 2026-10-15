@@ -23,6 +23,12 @@
   [data-theme="dsk"] .w.old, [data-theme="dsk"] .row.src .text, [data-theme="dsk"] .row.src .w.old { color: #fff; opacity: 1; }
   [data-theme="dsk"] .tag { border-top-color: #fff; }
   [data-theme="dsk"] .speaker i { border-color: #fff; background: radial-gradient(circle, #fff 0 30%, transparent 32%); }
+  /* BLANC: el DSK a la inversa (blanc pur i tot el text negre pur, sense grisos ni ombres) */
+  [data-theme="blanc"] { --bg: #fff; --fg: #000; --dim: #000; --tag: transparent; --tag-fg: #000; --shadow: none; }
+  [data-theme="blanc"] .text, [data-theme="blanc"] .speaker { font-weight: 600; text-shadow: none; }
+  [data-theme="blanc"] .w.old, [data-theme="blanc"] .row.src .text, [data-theme="blanc"] .row.src .w.old { color: #000; opacity: 1; }
+  [data-theme="blanc"] .tag { border-top-color: #000; }
+  [data-theme="blanc"] .speaker i { border-color: #000; background: radial-gradient(circle, #000 0 30%, transparent 32%); }
   [data-font="serif"] { --font: "Source Serif 4", Georgia, serif; }
   [data-font="system"] { --font: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 

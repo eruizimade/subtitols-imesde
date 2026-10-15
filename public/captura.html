@@ -238,7 +238,7 @@
         <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
         <label class="switch"><input type="checkbox" id="showSrc"><span></span>original</label>
         <label class="switch"><input type="checkbox" id="showSpeaker"><span></span>ponent</label>
-        <label class="switch"><input type="checkbox" id="showTags"><span></span>etiquetes</label>
+        <label class="switch" title="Les marques EN / ES al costat de cada llengua"><input type="checkbox" id="showTags"><span></span>indicadors d’idioma (EN/ES)</label>
         <label class="switch"><input type="checkbox" id="center"><span></span>centrat</label>
         <label class="switch" title="Durant la música o el descans: la pantalla queda en blanc encara que el sistema escriba alguna cosa"><input type="checkbox" id="hideScreen"><span></span><b>amagar pantalla</b></label>
         <label class="switch" title="Si hi ha una segona pantalla (HDMI, projector), la pantalla del públic s’hi obre sola a pantalla completa"><input type="checkbox" id="autoScreen"><span></span>obrir sola a la 2a pantalla</label>
@@ -688,7 +688,7 @@ function seg(id, options, key) {
   };
 }
 function saveDisplay() { save('display', prefs.display); sendDisplay(); }
-seg('theme', [['imesde', 'Imesde'], ['dark', 'Negre'], ['light', 'Crema'], ['dsk', 'DSK'], ['chroma', 'Croma'], ['transparent', 'Transp.']], 'theme');
+seg('theme', [['imesde', 'Imesde'], ['dark', 'Negre'], ['light', 'Crema'], ['dsk', 'DSK'], ['blanc', 'Blanc'], ['chroma', 'Croma'], ['transparent', 'Transp.']], 'theme');
 seg('lines', [[1, '1'], [2, '2'], [3, '3']], 'lines');
 seg('pos', [['bottom', 'Baix'], ['center', 'Mig'], ['top', 'Dalt']], 'pos');
 if (prefs.display.dwell == null) prefs.display.dwell = 2.5;
