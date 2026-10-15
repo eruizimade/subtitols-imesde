@@ -698,7 +698,7 @@ $('openDisplay').onclick = () => window.open('/pantalla', 'subtitols-pantalla', 
 fetch('/info').then((r) => r.json()).then((info) => {
   $('urls').innerHTML = '<span>Des d’un altre ordinador:</span>' +
     (info.lan.length ? info.lan.map((u) => `<code title="Copiar">${u}/pantalla</code>`).join('') : '<span>sense xarxa</span>') +
-    `<span class="muted" style="margin-left:auto">traducció: ${esc(info.models.TRANSLATE_MODEL)}</span>`;
+    `<span class="muted" style="margin-left:auto">traducció: ${esc(info.models.TRANSLATE_MODEL)} · v${esc(info.version || '')}</span>`;
   $('urls').onclick = (e) => { if (e.target.tagName === 'CODE') { navigator.clipboard.writeText(e.target.textContent); toast('Adreça copiada'); } };
 });
 
