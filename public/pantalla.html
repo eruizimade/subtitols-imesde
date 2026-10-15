@@ -31,6 +31,9 @@
   [data-theme="blanc"] .speaker i { border-color: #000; background: radial-gradient(circle, #000 0 30%, transparent 32%); }
   /* Gruix triat al panell: mana sobre el de cada fons (el Blanc i el DSK en porten un de propi) */
   [data-fw] .text, [data-fw] .row.src .text { font-weight: var(--fw) !important; }
+  /* Color propi per idioma (triat al panell): mana sobre el de cada fons, també al DSK i al Blanc */
+  .row[data-lc] .text, .row[data-lc] .text .w, .row[data-lc] .text .w.old { color: var(--lc) !important; opacity: 1 !important; }
+  .row[data-lc] .tag { color: var(--lc) !important; border-top-color: var(--lc) !important; }
   [data-font="serif"] { --font: "Source Serif 4", Georgia, serif; }
   [data-font="system"] { --font: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 
@@ -50,7 +53,7 @@
   .speaker i { width: .7em; height: .7em; border-radius: 50%; border: .16em solid var(--dot, #bce12a); box-sizing: border-box; background: radial-gradient(circle, var(--dot, #bce12a) 0 30%, transparent 32%); }
   .speaker.hide { opacity: 0; }
 
-  #rows { display: flex; flex-direction: column; gap: calc(var(--size) * .35); }
+  #rows { display: flex; flex-direction: column; gap: calc(var(--size) * .35 * var(--rowgap, 1)); }
   .row { display: flex; align-items: flex-end; gap: calc(var(--size) * .45); }
   .tag { flex: none; width: 2.6em; font: 700 calc(var(--size) * .3)/1 "DM Sans", sans-serif; letter-spacing: .24em; color: var(--tag-fg); background: var(--tag); padding: .45em 0; border-top: 2px solid var(--tag-fg); margin-bottom: calc(var(--size) * .42); }
   body.notags .tag { display: none; }
@@ -121,6 +124,8 @@
     root.style.setProperty('--mv', pct(area.v, 6, 0, 80) + 'vh');
     root.style.setProperty('--cv', pct(area.c, 0, -45, 45) + 'vh');
     if (cfg.guide) root.dataset.guide = ''; else delete root.dataset.guide;
+    const rg = Number(cfg.rowGap);
+    root.style.setProperty('--rowgap', rg >= 0 && rg <= 6 ? String(rg) : '1');
     const fw = Number(cfg.weight);
     if (fw >= 100 && fw <= 900) { root.dataset.fw = ''; root.style.setProperty('--fw', String(Math.round(fw / 100) * 100)); }
     else { delete root.dataset.fw; root.style.removeProperty('--fw'); }
@@ -133,6 +138,14 @@
         rows.insertAdjacentHTML('beforeend', `<div class="row ${k === 'src' ? 'src' : ''}"><span class="tag">${k === 'src' ? 'ORIG' : k.toUpperCase()}</span><div class="box"><div class="text" data-k="${k}"></div></div></div>`);
         lanes[k] = { el: document.querySelector(`.text[data-k="${k}"]`), spans: new Map(), top: 0, lastMove: 0 };
       }
+    }
+    // Colors per idioma
+    const colors = cfg.colorize && cfg.langColors && typeof cfg.langColors === 'object' ? cfg.langColors : {};
+    for (const row of document.querySelectorAll('#rows .row')) {
+      const k = row.querySelector('.text')?.dataset.k;
+      const c = colors[k];
+      if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) { row.dataset.lc = ''; row.style.setProperty('--lc', c); }
+      else { delete row.dataset.lc; row.style.removeProperty('--lc'); }
     }
     // la mida o el nombre de línies canvien on cau cada línia: es torna a situar a la posició ACTUAL
     // (abans tornava a la primera línia i el públic veia repetir frases de fa 20 s)

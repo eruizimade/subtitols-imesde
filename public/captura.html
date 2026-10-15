@@ -153,6 +153,7 @@
   .muted { color: var(--ink-soft); }
   .area { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
   .area input[type=range] { width: 90px; }
+  .area input[type=color] { width: 30px; height: 26px; padding: 0; border: 0; background: none; cursor: pointer; }
   select.fontsel { width: auto; max-width: 240px; padding: 6px 10px; font-size: 13px; font-weight: 600; }
   /* Alarma: s'ha de veure des de l'altra punta de la sala */
   #alarm { position: sticky; top: 0; z-index: 40; display: none; align-items: center; justify-content: center; gap: 14px; padding: 14px 20px; font-size: 20px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; text-align: center; }
@@ -244,6 +245,9 @@
           <button class="btn btn-ghost btn-sm" id="areaReset">Per defecte</button>
         </div>
         <label class="switch" title="Dibuixa a la sortida el requadre que ocupen els subtítols, per encaixar-lo al muntatge (recorda apagar-ho abans de l’acte)"><input type="checkbox" id="areaGuide"><span></span><b>marcar l’àrea a la sortida</b></label>
+        <div class="grp" title="Espai entre un idioma i el següent">Separació <input type="range" id="rowGap" min="0.5" max="4" step="0.1"></div>
+        <label class="switch" title="Cada idioma amb el seu color (mana sobre el del fons)"><input type="checkbox" id="colorize"><span></span>colors per idioma</label>
+        <span class="area" id="langColors"></span>
         <div class="grp">Línies <div class="seg" id="lines"></div></div>
         <div class="grp">Posició <div class="seg" id="pos"></div></div>
         <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
@@ -747,6 +751,30 @@ $('fontDel').onclick = async () => {
   await fetch('/fonts/' + encodeURIComponent(v.slice(7)), { method: 'DELETE' }).catch(() => {});
   prefs.display.font = 'sans'; saveDisplay(); toast('Tipografia esborrada');
 };
+// ─── Separació entre idiomes i colors per idioma ───
+$('rowGap').value = prefs.display.rowGap ?? 1;
+$('rowGap').oninput = () => { prefs.display.rowGap = Number($('rowGap').value); saveDisplay(); };
+const LANG_COLOR_DEF = ['#ffd84d', '#7cc8ff', '#b6f07a', '#ff9db5', '#c9a6ff'];
+function renderLangColors() {
+  const on = !!prefs.display.colorize;
+  $('colorize').checked = on;
+  const keys = (prefs.display.src ? ['src'] : []).concat(prefs.targets || []);
+  const cur = prefs.display.langColors || {};
+  $('langColors').hidden = !on;
+  $('langColors').innerHTML = keys.map((k, i) => `<label class="area">${k === 'src' ? 'ORIG' : esc(k.toUpperCase())} <input type="color" data-k="${esc(k)}" value="${/^#[0-9a-f]{6}$/i.test(cur[k] || '') ? cur[k] : LANG_COLOR_DEF[i % LANG_COLOR_DEF.length]}"></label>`).join('');
+  for (const inp of $('langColors').querySelectorAll('input')) inp.oninput = () => {
+    prefs.display.langColors = { ...(prefs.display.langColors || {}), [inp.dataset.k]: inp.value }; saveDisplay();
+  };
+}
+$('colorize').onchange = () => {
+  prefs.display.colorize = $('colorize').checked;
+  // en encendre, es fixen els colors que es veuen als selectors
+  if (prefs.display.colorize) { const m = { ...(prefs.display.langColors || {}) }; renderLangColors(); for (const inp of $('langColors').querySelectorAll('input')) m[inp.dataset.k] ||= inp.value; prefs.display.langColors = m; }
+  renderLangColors(); saveDisplay();
+};
+renderLangColors();
+setInterval(() => { const sig = JSON.stringify([prefs.display.src, prefs.targets, prefs.display.colorize]); if (sig !== renderLangColors.sig) { renderLangColors.sig = sig; renderLangColors(); } }, 1000);
+
 // ─── Àrea dels subtítols dins la sortida ───
 const AREA_DEF = { l: 5, r: 5, v: 6, c: 0 };
 function renderArea() {
