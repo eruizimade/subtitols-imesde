@@ -268,6 +268,9 @@ async function removeScript() {
 }
 
 // ─── Actualitzacions ─────────────────────────────────────────────────────────
+// SUBTITOLS_UPDATE_TEST=1 (només proves): accepta sense preguntar i els avisos van al registre
+const UPDATE_TEST = !!process.env.SUBTITOLS_UPDATE_TEST;
+const box = (win, opts) => (UPDATE_TEST ? (log(`[diàleg] ${opts.message}${opts.detail ? ' · ' + opts.detail : ''}`), Promise.resolve({ response: 0 })) : dialog.showMessageBox(win, opts));
 function restartServer() {
   if (!server) { startServerIfIdle(); return; }
   restarting = true;
@@ -296,38 +299,38 @@ async function checkUpdates(interactive) {
     const cur = code.current();
     let rel;
     try { rel = await code.latestRelease(enet.fetch.bind(enet)); }
-    catch (e) { if (interactive) dialog.showMessageBox(panel, { type: 'error', title: NAME, message: 'No s’ha pogut comprovar si hi ha versions noves', detail: e.message }); return; }
+    catch (e) { if (interactive) box(panel, { type: 'error', title: NAME, message: 'No s’ha pogut comprovar si hi ha versions noves', detail: e.message }); return; }
     if (!rel || !newer(rel.version, cur.version)) {
-      if (interactive) dialog.showMessageBox(panel, { type: 'info', title: NAME, message: `Tens l’última versió (${cur.version})` });
+      if (interactive) box(panel, { type: 'info', title: NAME, message: `Tens l’última versió (${cur.version})` });
       return;
     }
     if (await isRunning()) {
-      if (interactive) dialog.showMessageBox(panel, { type: 'info', title: NAME, message: `Hi ha la versió ${rel.version}`, detail: 'Amb els subtítols en marxa no s’actualitza res. Atura’ls i torna-ho a provar.' });
+      if (interactive) box(panel, { type: 'info', title: NAME, message: `Hi ha la versió ${rel.version}`, detail: 'Amb els subtítols en marxa no s’actualitza res. Atura’ls i torna-ho a provar.' });
       return;
     }
-    const ask = await dialog.showMessageBox(panel, {
+    const ask = await box(panel, {
       type: 'question', title: NAME, buttons: ['Actualitzar ara', 'Ara no'], defaultId: 0, cancelId: 1,
       message: `Hi ha una versió nova: ${rel.version} (tens la ${cur.version})`,
       detail: `${rel.notes.slice(0, 600)}\n\nNo es perd res: la clau, el guió i les tipografies es queden. Si la nova no arrenca, es torna sola a l’anterior.`,
     });
     if (ask.response !== 0) return;
-    if (await isRunning()) return dialog.showMessageBox(panel, { type: 'info', title: NAME, message: 'Els subtítols s’han posat en marxa: no s’actualitza.' });
+    if (await isRunning()) return box(panel, { type: 'info', title: NAME, message: 'Els subtítols s’han posat en marxa: no s’actualitza.' });
     let next;
     try { next = await code.download(rel, enet.fetch.bind(enet)); }
-    catch (e) { return dialog.showMessageBox(panel, { type: 'error', title: NAME, message: 'No s’ha pogut baixar la versió nova', detail: e.message }); }
+    catch (e) { return box(panel, { type: 'error', title: NAME, message: 'No s’ha pogut baixar la versió nova', detail: e.message }); }
     code.setCurrent(next, cur);
     restartServer();
     if (await serverVersionIs(next.version)) {
       log(`✓ actualitzat a ${next.version}`);
       code.prune();
       reloadWindows();
-      dialog.showMessageBox(panel, { type: 'info', title: NAME, message: `Actualitzat a la versió ${next.version}` });
+      box(panel, { type: 'info', title: NAME, message: `Actualitzat a la versió ${next.version}` });
     } else {
       const back = code.rollback();
       restartServer();
       await serverVersionIs(back.version, 15000);
       reloadWindows();
-      dialog.showMessageBox(panel, { type: 'error', title: NAME, message: 'La versió nova no ha arrencat', detail: `S’ha tornat a la ${back.version}. No s’ha perdut res.` });
+      box(panel, { type: 'error', title: NAME, message: 'La versió nova no ha arrencat', detail: `S’ha tornat a la ${back.version}. No s’ha perdut res.` });
     }
     buildMenu();
   } finally { checking = false; }
@@ -335,14 +338,14 @@ async function checkUpdates(interactive) {
 
 async function rollbackMenu() {
   const cur = code.current();
-  if (cur.bundled) return dialog.showMessageBox(panel, { type: 'info', title: NAME, message: `Ja fas servir la versió de sèrie (${cur.version})` });
-  if (await isRunning()) return dialog.showMessageBox(panel, { type: 'info', title: NAME, message: 'Atura els subtítols abans de canviar de versió.' });
+  if (cur.bundled) return box(panel, { type: 'info', title: NAME, message: `Ja fas servir la versió de sèrie (${cur.version})` });
+  if (await isRunning()) return box(panel, { type: 'info', title: NAME, message: 'Atura els subtítols abans de canviar de versió.' });
   const back = code.rollback();
   restartServer();
   await serverVersionIs(back.version, 15000);
   reloadWindows();
   buildMenu();
-  dialog.showMessageBox(panel, { type: 'info', title: NAME, message: `Tornat a la versió ${back.version}` });
+  box(panel, { type: 'info', title: NAME, message: `Tornat a la versió ${back.version}` });
 }
 
 function buildMenu() {
@@ -443,7 +446,7 @@ app.whenReady().then(async () => {
   if (!(await waitServer())) log('✖ el servidor triga a respondre: s’obre igualment el panell (es reconnecta sol)');
   createPanel();
   // Comprovació d'actualitzacions en segon pla (només pregunta si n'hi ha i els subtítols estan aturats)
-  setTimeout(() => checkUpdates(false).catch((e) => log('· comprovació d’actualitzacions:', e.message)), 20000);
+  setTimeout(() => checkUpdates(UPDATE_TEST).catch((e) => log('· comprovació d’actualitzacions:', e.message)), UPDATE_TEST ? 4000 : 20000);
   // Permís de micròfon de macOS: només si encara no hi és, i DESPRÉS d'obrir-ho tot (la pregunta del
   // sistema bloquejava l'arrencada fins que algú la contestava: 5 minuts el 14/10/2026)
   if (process.platform === 'darwin' && !process.env.SUBTITOLS_FAKE_AUDIO) {
