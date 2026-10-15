@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createNative, listDevices } from './nadiu.mjs';
+import { createPrompter } from './prompter.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 // DATA_DIR: on viuen .env, guio.json i sessions/. Per defecte, aquesta carpeta (com sempre); l'app
@@ -131,7 +132,8 @@ function broadcast() {
       bootId: BOOT_ID,
       fonts: fontList,
       native: native ? { active: native.status.active, name: native.status.name, uid: native.status.uid, channels: native.status.channels, levels: native.status.levels.map((v) => Math.round(v * 1e4) / 1e4), speaker: native.status.speaker, lastAt: native.status.lastAt, error: native.status.error } : null,
-      guio: guio ? { from: guio.from || 'guio.json', n: guio.segments.length, made: guio.made || guio.revised || null } : null,
+      guio: guio ? { from: guio.from || 'guio.json', n: guio.segments.length, made: guio.made || guio.revised || null, rev: guio.rev } : null,
+      prompter: { ...prompter.position(), auto: prompterAuto },
     };
     const shared = JSON.stringify(base);
     for (const c of [...operators, ...displays]) {
@@ -164,16 +166,22 @@ const smooth = (prev, v) => (prev == null ? v : Math.round(prev * 0.7 + v * 0.3)
 // traducció al model. No hi ha cap risc si no s'hi assembla res: la traducció va com sempre.
 const GUIO_FILE = process.env.GUIO ? path.resolve(process.env.GUIO) : path.join(DATA_DIR, 'guio.json');
 let guio = null;   // { segments: [{ src, tr, words:Set }] }
+// La CARTA (prompter, prompter.mjs): on som del guió, seguint la veu o a mà
+const prompter = createPrompter();
+let prompterAuto = true; // seguir la veu (si no, només avança a mà)
 let guioPos = -1;  // on érem del guió (per preferir el que ve a continuació)
 const contentWords = (t) => new Set(t.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3));
 function loadGuio() {
   try {
-    if (!fs.existsSync(GUIO_FILE)) { guio = null; return; }
+    if (!fs.existsSync(GUIO_FILE)) { guio = null; prompter.load([]); broadcast(); return; }
     const g = JSON.parse(fs.readFileSync(GUIO_FILE, 'utf8'));
     guio = { ...g, segments: (g.segments || []).map((x) => ({ ...x, words: contentWords(x.src) })) };
+    guio.rev = `${g.made || g.revised || ''}·${fs.statSync(GUIO_FILE).mtimeMs}`;
     guioPos = -1;
+    prompter.load(guio.segments);
     console.log(`  ✓ Guió carregat: ${guio.segments.length} frases (${g.from || 'guio.json'})`);
-  } catch (e) { guio = null; pushError('guió', `no s'ha pogut llegir guio.json (${e.message})`); }
+  } catch (e) { guio = null; prompter.load([]); pushError('guió', `no s'ha pogut llegir guio.json (${e.message})`); }
+  broadcast();
 }
 loadGuio();
 try { fs.watchFile(GUIO_FILE, { interval: 2000 }, () => loadGuio()); } catch {}
@@ -376,6 +384,7 @@ function finalize(block) {
   block.final = true;
   block.tEnd = Date.now();
   if (open === block) open = null;
+  if (prompterAuto) prompter.flush();
   if (!block.src) { blocks = blocks.filter((b) => b !== block); broadcast(); return; }
   translateBlock(block).then(() => log({ kind: 'frase', speaker: block.speaker, src: block.src, ...block.tr }));
 }
@@ -409,6 +418,7 @@ function onTranscriptDelta(delta) {
       if (!delta.trim()) { broadcast(); return; }
     }
   }
+  if (prompterAuto && state.listening) prompter.feed(delta);
   let b = open || newBlock(sp);
   b.src += delta;
   b.tEnd = now;
@@ -816,6 +826,11 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ running: state.running, version: CODE_VERSION, lan: lanUrls(), modes: Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.label])), models: { TRANSLATE_MODEL } }));
   }
   if (url.pathname.startsWith('/fonts/')) return handleFonts(req, res, url);
+  // El guió sencer per a la carta (no viatja a cada estat: només quan canvia, per «rev»)
+  if (url.pathname === '/guio') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(guio ? { rev: guio.rev, from: guio.from || 'guio.json', source: guio.source || null, segments: guio.segments.map((x) => ({ src: x.src, tr: x.tr || {} })) } : null));
+  }
   if (url.pathname === '/native/devices') {
     return listDevices(CAPTURA_BIN).then((r) => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(r)); });
   }
@@ -864,6 +879,13 @@ wss.on('connection', (ws, req) => {
       broadcast();
     }
     else if (msg.type === 'display') { state.display = msg.display; broadcast(); }
+    else if (msg.type === 'prompter') {
+      if (msg.op === 'goto' && Number.isFinite(msg.i)) prompter.goTo(msg.i);
+      else if (msg.op === 'step') prompter.step(msg.d < 0 ? -1 : 1);
+      else if (msg.op === 'auto') prompterAuto = !!msg.on;
+      log({ kind: 'carta', op: msg.op, ...prompter.position(), auto: prompterAuto });
+      broadcast();
+    }
   });
   ws.on('close', () => { operators.delete(ws); displays.delete(ws); if (ws === audioOwner) audioOwner = null; });
 });

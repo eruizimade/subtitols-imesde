@@ -30,7 +30,7 @@ const stage = path.join(out, 'codi');
 fs.mkdirSync(stage);
 fs.mkdirSync(path.join(ROOT, 'bin'), { recursive: true });
 run('swiftc', ['-O', 'nadiu/captura.swift', '-o', 'bin/captura']);   // captura multicanal nativa
-for (const f of ['server.mjs', 'nadiu.mjs', 'guio.mjs', 'package.json', 'LLEGEIX-ME.md']) fs.copyFileSync(path.join(ROOT, f), path.join(stage, f));
+for (const f of ['server.mjs', 'nadiu.mjs', 'prompter.mjs', 'guio.mjs', 'guio-prepara.mjs', 'package.json', 'LLEGEIX-ME.md']) fs.copyFileSync(path.join(ROOT, f), path.join(stage, f));
 fs.mkdirSync(path.join(stage, 'bin'));
 fs.copyFileSync(path.join(ROOT, 'bin', 'captura'), path.join(stage, 'bin', 'captura'));
 fs.chmodSync(path.join(stage, 'bin', 'captura'), 0o755);

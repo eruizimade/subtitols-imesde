@@ -159,6 +159,18 @@
   .urls code:hover { background: var(--cream-2); }
 
   /* Transcripció */
+  /* ─── Carta (prompter) ─── */
+  .cartaBar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .cartaList { max-height: 300px; overflow: auto; margin: 14px -8px 0; padding: 0 8px; border-top: 1px solid var(--line); }
+  .cartaList .cl { display: grid; grid-template-columns: 30px 1fr; gap: 8px; padding: 7px 8px; margin: 2px -8px; border-radius: 10px; cursor: pointer; font-size: 14px; line-height: 1.4; }
+  .cartaList .cl:hover { background: var(--cream); }
+  .cartaList .cl b { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .cartaList .cl.read { color: var(--ink-soft); }
+  .cartaList .cl.cur { background: rgba(188,225,42,.28); font-weight: 600; }
+  .cartaList .cl.cur b { color: var(--green-ink); }
+  html.dark .cartaList .cl:hover { background: #2a2b28; }
+  html.dark .cartaList .cl.cur { background: rgba(188,225,42,.18); }
+  .cartaPos { font-size: 13px; font-weight: 600; color: var(--ink-soft); font-variant-numeric: tabular-nums; margin-left: auto; }
   .log { max-height: max(320px, calc(100vh - 560px)); overflow: auto; margin: 0 -8px; padding: 0 8px; scroll-behavior: smooth; }
   .blk { display: grid; grid-template-columns: 62px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
   .blk:first-child { border-top: 0; }
@@ -296,7 +308,20 @@
     </section>
 
     <section class="card">
-      <h2 class="kicker"><span class="n">06</span> Transcripció
+      <h2 class="kicker"><span class="n">06</span> Carta <span class="right"><span class="seg" id="view" title="Què surt a la pantalla del públic: els subtítols del que es diu, o el guió sencer baixant a mesura que es llegeix"></span></span></h2>
+      <div class="cartaBar">
+        <button class="btn btn-ghost btn-sm" id="cartaPrev" title="Frase anterior">◀ Anterior</button>
+        <button class="btn btn-ghost btn-sm" id="cartaNext" title="Frase següent">Següent ▶</button>
+        <button class="btn btn-ghost btn-sm" id="cartaTop">Al principi</button>
+        <label class="switch" title="La carta avança sola a mesura que es llegeix (cal que la sessió estigui en marxa). Apagat: només avança amb els botons o clicant una frase"><input type="checkbox" id="cartaAuto"><span></span>seguir la veu</label>
+        <span class="cartaPos" id="cartaPos"></span>
+      </div>
+      <p class="hint" id="cartaHint"></p>
+      <div class="cartaList" id="cartaList"></div>
+    </section>
+
+    <section class="card">
+      <h2 class="kicker"><span class="n">07</span> Transcripció
         <span class="right"><button class="btn btn-ghost btn-sm" id="clear">Netejar pantalla</button> <button class="btn btn-ghost btn-sm" id="download">Descarregar .txt</button></span>
       </h2>
       <div class="log" id="log"><div class="nolog"><div class="rings"></div>Quan comencis, aquí hi sortirà tot el que es digui i les traduccions.</div></div>
@@ -388,6 +413,7 @@ function onState(s) {
   if (s.running) { stoppedBySelf = false; stoppedAlarm = 0; }
   lastState = s;
   syncListen(s);
+  syncCarta(s).catch((e) => console.error(e));
   if (s.native?.active) {
     if (s.native.lastAt) lastFrameAt = performance.now() - Math.max(0, s.now - s.native.lastAt);
     const lv = s.native.levels || [];
@@ -901,6 +927,70 @@ fetch('/info').then((r) => r.json()).then((info) => {
     `<span class="muted" style="margin-left:auto">traducció: ${esc(info.models.TRANSLATE_MODEL)} · v${esc(info.version || '')}</span>`;
   $('urls').onclick = (e) => { if (e.target.tagName === 'CODE') { navigator.clipboard.writeText(e.target.textContent); toast('Adreça copiada'); } };
 });
+
+// ─── Carta (prompter): el guió sencer a la pantalla, seguint qui llegeix ───
+// La posició la porta el SERVIDOR (és qui sent la veu): aquí només s'ensenya i es corregeix a mà.
+let viewChangedAt = 0;
+prefs.display.view = 'subs'; // en obrir el panell, el que ja hi hagi a la pantalla mana (es llegeix de l'estat)
+function renderView() {
+  const cur = prefs.display.view === 'carta' ? 'carta' : 'subs';
+  $('view').innerHTML = [['subs', 'Subtítols'], ['carta', 'Carta']].map(([v, t]) => `<button data-v="${v}" class="${cur === v ? 'on' : ''}">${t}</button>`).join('');
+}
+$('view').onclick = (e) => {
+  const v = e.target.dataset.v; if (!v || v === prefs.display.view) return;
+  prefs.display.view = v; viewChangedAt = Date.now(); renderView(); saveDisplay();
+  toast(v === 'carta' ? 'Pantalla en mode CARTA: surt el guió sencer' : 'Pantalla en mode SUBTÍTOLS');
+};
+const prompterSend = (o) => send({ type: 'prompter', ...o });
+$('cartaPrev').onclick = () => prompterSend({ op: 'step', d: -1 });
+$('cartaNext').onclick = () => prompterSend({ op: 'step', d: 1 });
+$('cartaTop').onclick = () => prompterSend({ op: 'goto', i: 0 });
+$('cartaAuto').onchange = () => prompterSend({ op: 'auto', on: $('cartaAuto').checked });
+$('cartaList').onclick = (e) => { const r = e.target.closest('.cl'); if (r) prompterSend({ op: 'goto', i: Number(r.dataset.i) }); };
+// Un comandament de presentacions (clicker) envia Av Pàg / Re Pàg: serveix per avançar la carta
+document.addEventListener('keydown', (e) => {
+  if (prefs.display.view !== 'carta' || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.('input, select, textarea, [contenteditable]')) return;
+  const d = e.key === 'PageDown' ? 1 : e.key === 'PageUp' ? -1 : 0;
+  if (!d) return;
+  e.preventDefault(); prompterSend({ op: 'step', d });
+});
+const cartaUi = { rev: undefined, segs: [], i: null, follow: true };
+async function syncCarta(s) {
+  if (s.display && Date.now() - viewChangedAt > 1500 && (s.display.view || 'subs') !== prefs.display.view) { prefs.display.view = s.display.view || 'subs'; save('display', prefs.display); renderView(); }
+  const rev = s.guio?.rev || null;
+  if (rev !== cartaUi.rev) {
+    cartaUi.rev = rev; cartaUi.i = null;
+    let g = null;
+    if (rev) { try { g = await (await fetch('/guio', { cache: 'no-store' })).json(); } catch { cartaUi.rev = undefined; } }
+    cartaUi.segs = g?.segments || [];
+    $('cartaList').innerHTML = cartaUi.segs.map((x, i) => `<div class="cl" data-i="${i}"><b>${i + 1}</b><span>${esc(x.src)}</span></div>`).join('');
+  }
+  const p = s.prompter || { i: -1, f: 0, auto: true };
+  $('cartaAuto').checked = p.auto !== false;
+  const n = cartaUi.segs.length;
+  for (const b of ['cartaPrev', 'cartaNext', 'cartaTop']) $(b).disabled = !n;
+  $('cartaPos').textContent = n ? (p.i >= 0 ? `frase ${p.i + 1} de ${n}` : `${n} frases · encara no ha començat`) : '';
+  $('cartaHint').textContent = !n ? 'Cal un guió carregat (menú Guió → Carregar guió…): la carta és el guió sencer.'
+    : p.auto !== false && !s.running ? 'Segueix la veu quan la sessió està en marxa. Mentrestant, avança-la a mà (botons, clic a una frase o Av Pàg / Re Pàg).'
+    : '';
+  if (p.i !== cartaUi.i) {
+    cartaUi.i = p.i;
+    let curEl = null;
+    for (const r of $('cartaList').children) {
+      const k = Number(r.dataset.i);
+      r.classList.toggle('read', p.i >= 0 && k < p.i);
+      r.classList.toggle('cur', k === p.i);
+      if (k === p.i) curEl = r;
+    }
+    // La llista acompanya la posició, tret que l'operador hi estigui buscant alguna cosa (ratolí a sobre)
+    if (curEl && !$('cartaList').matches(':hover')) {
+      const L = $('cartaList');
+      L.scrollTo({ top: curEl.offsetTop - L.offsetTop - L.clientHeight * 0.35, behavior: 'smooth' });
+    }
+  }
+}
+renderView();
 
 renderMode();
 renderLangs(); renderSwap();
