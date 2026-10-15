@@ -61,6 +61,7 @@
   header .btn-green { box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 8px 24px rgba(188,225,42,.25); }
   header .btn-stop { background: var(--cream); color: var(--ink); }
   header .btn-stop.armed { background: var(--red); color: #fff; }
+  .qs-l { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); padding: 0 6px 0 8px; align-self: center; }
   .listen { min-width: 150px; font-weight: 700; background: var(--red, #d64545); color: #fff; }
   .listen.on { background: var(--green); color: var(--ink); }
   .listen.off-run { animation: listenBlink 1.2s ease-in-out infinite; }
@@ -234,7 +235,7 @@
 
   <div class="col">
     <section class="card">
-      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><button class="btn btn-sm listen on" id="listenBtn" title="Apaga-ho quan no s’ha de subtitular (música, parlament en un altre idioma, assaig): no s’escolta res, però tot segueix en marxa">● Escoltant</button> <button class="btn btn-ghost btn-sm" id="clearScreen" title="Treu de la pantalla tot el text que hi ha ara">Netejar pantalla</button> <button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
+      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><span class="seg" id="quickSrc" title="Idioma que es parla ara. Canvia-ho quan el ponent canviï d'idioma (s'aplica a la pausa, o en 3 s)"></span> <button class="btn btn-sm listen on" id="listenBtn" title="Apaga-ho quan no s’ha de subtitular (música, parlament en un altre idioma, assaig): no s’escolta res, però tot segueix en marxa">● Escoltant</button> <button class="btn btn-ghost btn-sm" id="clearScreen" title="Treu de la pantalla tot el text que hi ha ara">Netejar pantalla</button> <button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
       <div class="preview"><iframe id="pv" src="/pantalla?embed=1"></iframe></div>
       <div class="toolbar">
         <div class="grp">Fons <div class="seg" id="theme"></div></div>
@@ -470,14 +471,16 @@ $('mode').onclick = (e) => {
 };
 function renderLangs() {
   $('srcLang').innerHTML = [['auto', 'Automàtic'], ...Object.entries(LANGS).slice(0, 3)].map(([k, v]) => `<button data-v="${k}" class="${prefs.sourceLang === k ? 'on' : ''}">${v}</button>`).join('');
+  $('quickSrc').innerHTML = '<b class="qs-l">Parla</b>' + [['auto', 'Auto'], ...Object.keys(LANGS).slice(0, 3).map((k) => [k, k.toUpperCase()])].map(([k, v]) => `<button data-v="${k}" class="${prefs.sourceLang === k ? 'on' : ''}">${v}</button>`).join('');
   // L'ordre dels subtítols a la pantalla és l'ordre en què es marquen (el número ho diu)
   $('targets').innerHTML = Object.entries(LANGS).map(([k, v]) => { const n = prefs.targets.indexOf(k); return `<button class="chip ${n >= 0 ? 'on' : ''}" data-v="${k}">${n >= 0 && prefs.targets.length > 1 ? `${n + 1}·` : ''}${v}</button>`; }).join('');
 }
-$('srcLang').onclick = (e) => {
-  const v = e.target.dataset.v; if (!v) return;
+function setSourceLang(v) {
   prefs.sourceLang = v; save('sourceLang', v); renderLangs(); sendConfig();
-  if (running) toast('L’idioma nou s’aplica a la pròxima pausa.');
-};
+  if (running) toast(v === 'auto' ? 'Es parla en: automàtic' : `Es parla en ${LANGS[v] || v}: s’aplica a la pausa (o en 3 s)`);
+}
+$('srcLang').onclick = (e) => { const v = e.target.dataset.v; if (v) setSourceLang(v); };
+$('quickSrc').onclick = (e) => { const v = e.target.dataset.v; if (v) setSourceLang(v); };
 $('targets').onclick = (e) => {
   const v = e.target.dataset.v; if (!v) return;
   const on = prefs.targets.includes(v);

@@ -313,8 +313,11 @@ function translateBlock(block) {
   const text = block.src.trim();
   const final = block.final;
   const jobs = [];
+  // Idioma del que s'ha dit: el fixat a «Es parla en» quan va començar la frase o, si no, el del ponent.
+  // A l'idioma que ja és el de l'original no es tradueix: surt tal qual.
+  const srcL = block.srcLang && block.srcLang !== 'auto' ? block.srcLang : block.lang || null;
   for (const lang of state.config.targets) {
-    if (state.config.sourceLang === lang || !/\p{L}/u.test(text)) { block.tr[lang] = text; continue; }
+    if (srcL === lang || !/\p{L}/u.test(text)) { block.tr[lang] = text; continue; }
     const running = block.jobs[lang];
     if (running && !final) continue; // parcial: si encara corre l'anterior, no n'engeguem una altra
     running?.abort();
@@ -328,7 +331,7 @@ function translateBlock(block) {
         if (seq !== block.seq[lang]) return;
         if (first && out) { first = false; state.latency.translate = smooth(state.latency.translate, Date.now() - t); }
         if (acceptTranslation(block.tr[lang] || '', out, { done, final })) { block.tr[lang] = out.trim(); broadcast(); }
-      }, ctrl.signal, final, block.lang)
+      }, ctrl.signal, final, srcL)
         .catch((e) => { if (e.name !== 'AbortError') pushError(`traducció ${lang}`, e); })
         .finally(() => { if (block.jobs[lang] === ctrl) block.jobs[lang] = null; }),
     );
@@ -359,7 +362,7 @@ function finalize(block) {
 }
 
 function newBlock(speakerIdx) {
-  const b = { id: nextId++, speakerIdx, speaker: speakerName(speakerIdx), lang: speakerLang(speakerIdx), src: '', tr: {}, final: false, t0: Date.now(), tEnd: Date.now() };
+  const b = { id: nextId++, speakerIdx, speaker: speakerName(speakerIdx), lang: speakerLang(speakerIdx), srcLang: state.config.sourceLang, src: '', tr: {}, final: false, t0: Date.now(), tEnd: Date.now() };
   blocks.push(b);
   if (blocks.length > 60) blocks = blocks.slice(-40);
   open = b;
@@ -824,6 +827,7 @@ wss.on('connection', (ws, req) => {
     else if (msg.type === 'listen') { state.listening = !!msg.on; log({ kind: 'escolta', on: state.listening }); broadcast(); }
     else if (msg.type === 'config') {
       const before = JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs]);
+      const srcBefore = state.config.sourceLang;
       const wasInput = JSON.stringify(state.config.input || null);
       Object.assign(state.config, sanitizeConfig(msg.config));
       native.setSpeakers(state.config.speakerChannels);
@@ -831,6 +835,8 @@ wss.on('connection', (ws, req) => {
       // El context, l'idioma i el mode s'envien a OpenAI en obrir la sessió: si canvien en directe, es renova
       if (state.running && before !== JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs])) {
         pendingCfgRotate ||= Date.now(); // a la pròxima pausa (o en 20 s), no a mitja frase
+        // Canvi d'idioma parlat: qui comença a parlar en un altre idioma no pot esperar 20 s (a la pausa o en 3 s)
+        if (state.config.sourceLang !== srcBefore) pendingCfgRotate = Math.min(pendingCfgRotate, Date.now() - 17000);
       }
       broadcast();
     }
