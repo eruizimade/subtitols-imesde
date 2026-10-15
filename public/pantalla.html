@@ -237,9 +237,12 @@
       // la tornaven a repartir i, centrada, saltava 300 px de costat (assaig del 15/10)
       const brk = (prevSpeaker !== undefined && b.speaker !== prevSpeaker) || ((smooth || b.literal) && want.length > 0);
       prevSpeaker = b.speaker;
-      // Una paraula que ja ha sortit no desapareix encara que la traducció nova sigui més curta (els dos moviments)
-      for (let i = words.length; ; i++) { const sp = lane.spans.get(`${b.id}:${i}`); if (!sp || !lane.revealed?.has(sp)) break; words.push(sp.textContent); }
-      words.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0 }));
+      // Paraules ja ensenyades: NOMÉS es protegeixen si la frase nova té el MATEIX nombre de paraules (canvi
+      // d'una per una altra: és el que feia saltar la línia sense que es perdés res). Si en té més o menys, mana
+      // la traducció nova: protegir-les desquadrava les posicions i es perdien o repetien paraules (2.2.0–2.4.0).
+      let ex = 0; while (lane.spans.has(`${b.id}:${ex}`)) ex++;
+      const lock = words.length === ex;
+      words.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0, lock }));
     }
 
     // 2. Reconcilia amb el que ja hi ha (sense refer el DOM: així no salta res)
@@ -259,7 +262,8 @@
         span._space = document.createTextNode(' ');
         span._br = document.createElement('br');
         lane.spans.set(x.key, span);
-      } else if (span.textContent !== x.w && !lane.revealed?.has(span)) {
+      } else if (span.textContent !== x.w && !(x.lock && lane.revealed?.has(span) && !x.w.startsWith(span.textContent))) {
+        // (una paraula sí que es pot COMPLETAR: la traducció arriba a trossos i «sto» ha de poder ser «story»)
         // Una paraula que ja s'ha ensenyat no es reescriu: la traducció final d'OpenAI tornava a escriure
         // paraules que el públic ja havia llegit i la línia creixia, decreixia i saltava (els dos moviments)
         span.textContent = x.w;
