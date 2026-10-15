@@ -1,0 +1,31 @@
+{
+  "name": "subtitols-imesde",
+  "version": "1.1.0",
+  "description": "Subtítols en directe (OpenAI) · IMESDE",
+  "main": "app/main.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "prova": "node prova.mjs",
+    "compara": "node compara.mjs",
+    "acte": "caffeinate -dimsu node server.mjs",
+    "resistencia": "node proves/resistencia.mjs",
+    "app": "electron .",
+    "empaqueta": "node app/empaqueta.mjs",
+    "publica": "node app/publica.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.21.3"
+  },
+  "private": true,
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.7.2"
+  },
+  "productName": "Subtítols IMESDE",
+  "shellMin": "1.1.0",
+  "repository": "github:eruizimade/subtitols-imesde"
+}

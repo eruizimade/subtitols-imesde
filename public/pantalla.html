@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subtítols · pantalla</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<style>
+  :root {
+    --size: 3.6vw; --lines: 2; --lh: 1.3;
+    --green: #bce12a; --bg: #000; --fg: #f4f3ef; --dim: rgba(244,243,239,.55); --tag: transparent; --tag-fg: var(--green);
+    --shadow: none; --font: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+  [data-theme="imesde"] { --bg: #2b2b2b; }
+  [data-theme="transparent"] { --bg: transparent; --shadow: 0 .06em .18em rgba(0,0,0,.95), 0 0 .6em rgba(0,0,0,.6); --tag: rgba(0,0,0,.55); }
+  [data-theme="chroma"] { --bg: #00b140; --shadow: 0 .05em .15em rgba(0,0,0,.8); --tag: rgba(0,0,0,.55); }
+  [data-theme="light"] { --bg: #f4f3ef; --fg: #2b2b2b; --dim: rgba(43,43,43,.55); --tag-fg: #5f7207; }
+  /* DSK (clau de lluminància, p. ex. Roland V-160HD): negre PUR i tot el text blanc PUR, sense ombres ni
+     grisos. Qualsevol gris (línies antigues, ombres) el mesclador el faria mig transparent. */
+  [data-theme="dsk"] { --bg: #000; --fg: #fff; --dim: #fff; --tag: transparent; --tag-fg: #fff; --shadow: none; }
+  [data-theme="dsk"] .text, [data-theme="dsk"] .speaker { font-weight: 600; text-shadow: none; }
+  [data-theme="dsk"] .w.old, [data-theme="dsk"] .row.src .text, [data-theme="dsk"] .row.src .w.old { color: #fff; opacity: 1; }
+  [data-theme="dsk"] .tag { border-top-color: #fff; }
+  [data-theme="dsk"] .speaker i { border-color: #fff; background: radial-gradient(circle, #fff 0 30%, transparent 32%); }
+  [data-font="serif"] { --font: "Source Serif 4", Georgia, serif; }
+  [data-font="system"] { --font: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; font-family: var(--font); }
+  body:not(.embed) { cursor: none; }
+  .stage { position: absolute; left: 5vw; right: 5vw; bottom: 6vh; display: flex; flex-direction: column; gap: calc(var(--size) * .45); transition: opacity .8s ease; }
+  [data-pos="center"] .stage { bottom: auto; top: 50%; transform: translateY(-50%); }
+  [data-pos="top"] .stage { bottom: auto; top: 6vh; }
+  .stage.idle { opacity: 0; }
+
+  .speaker { display: flex; align-items: center; gap: .6em; font-size: calc(var(--size) * .42); font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--dim); min-height: 1.3em; text-shadow: var(--shadow); transition: opacity .4s; }
+  .speaker i { width: .7em; height: .7em; border-radius: 50%; border: .16em solid var(--dot, #bce12a); box-sizing: border-box; background: radial-gradient(circle, var(--dot, #bce12a) 0 30%, transparent 32%); }
+  .speaker.hide { opacity: 0; }
+
+  #rows { display: flex; flex-direction: column; gap: calc(var(--size) * .35); }
+  .row { display: flex; align-items: flex-end; gap: calc(var(--size) * .45); }
+  .tag { flex: none; width: 2.6em; font: 700 calc(var(--size) * .3)/1 "DM Sans", sans-serif; letter-spacing: .24em; color: var(--tag-fg); background: var(--tag); padding: .45em 0; border-top: 2px solid var(--tag-fg); margin-bottom: calc(var(--size) * .42); }
+  body.notags .tag { display: none; }
+
+  /* La caixa fa N línies; el text a dins puja LÍNIA A LÍNIA, amb un temps mínim a la vista */
+  .box { --fs: var(--size); position: relative; flex: 1; height: calc(var(--fs) * var(--lh) * var(--lines)); overflow: hidden; }
+  .row.src .box { --fs: calc(var(--size) * .72); }
+  .text { position: absolute; left: 0; right: 0; top: 0; font-size: var(--fs); line-height: var(--lh); font-weight: 500; text-shadow: var(--shadow);
+          transition: transform .55s cubic-bezier(.3,.7,.2,1); will-change: transform; }
+  [data-align="center"] .text { text-align: center; }
+  .row.src .text { color: var(--dim); font-weight: 400; }
+  .w { transition: opacity .35s ease, color .6s ease; }
+  .w.wait { opacity: 0; }          /* ja ha arribat però encara no toca ensenyar-la */
+  .w.gone { opacity: 0; }          /* línia que surt per dalt */
+  .w.old { color: var(--dim); }    /* frases anteriors */
+  .row.src .w.old { opacity: .7; }
+  @media (prefers-reduced-motion: reduce) { .text, .w { transition: none; } }
+</style>
+</head>
+<body>
+<div class="stage idle" id="stage">
+  <div class="speaker hide" id="speaker"><i></i><span></span></div>
+  <div id="rows"></div>
+</div>
+<script>
+  // La pantalla segueix el que es tria al panell de captura. Els paràmetres de la URL
+  // hi manen per sobre: ?langs=ca,es&size=4&lines=2&theme=imesde|dark|transparent|chroma|light
+  // &pos=bottom|center|top&align=left|center&src=1&tags=0&speaker=0&clear=8&dwell=2.5&font=serif
+  const q = new URLSearchParams(location.search);
+  if (q.get('embed')) document.body.classList.add('embed');
+  const DEFAULTS = { hidden: false, langs: ['ca', 'es', 'en'], size: 3.6, lines: 2, theme: 'imesde', pos: 'bottom', align: 'left', src: false, tags: true, speaker: true, clear: 8, dwell: 2.5, font: 'sans' };
+  const COLORS = ['#bce12a', '#4ea1ff', '#ffb547', '#ff6b8b', '#b58cff', '#3fd6c6'];
+  let cfg = { ...DEFAULTS };
+  let offset = 0;
+  let last = null;
+  let resetAt = 0;     // després d'un silenci llarg, la pantalla comença de nou
+  const lanes = {};    // estat de cada fila: { el, spans: Map, top, lastMove }
+
+  function fromUrl() {
+    const o = {};
+    if (q.get('langs')) o.langs = q.get('langs').split(',').filter((l) => /^[a-z]{2,3}$/.test(l));
+    for (const k of ['size', 'lines', 'clear', 'dwell']) { const v = Number(q.get(k)); if (q.get(k) && Number.isFinite(v) && v > 0) o[k] = k === 'lines' ? Math.round(v) : v; }
+    for (const k of ['theme', 'pos', 'align', 'font']) if (q.get(k)) o[k] = q.get(k);
+    for (const k of ['src', 'tags', 'speaker']) if (q.get(k) != null) o[k] = q.get(k) === '1';
+    return o;
+  }
+
+  function applyCfg(remote) {
+    const next = { ...DEFAULTS, ...(remote || {}), ...fromUrl() };
+    // Res que arribi per la xarxa no pot trencar la pantalla (ni injectar-hi res)
+    next.langs = (Array.isArray(next.langs) ? next.langs : DEFAULTS.langs).filter((l) => /^[a-z]{2,3}$/.test(l));
+    for (const k of ['size', 'lines', 'clear', 'dwell']) if (!(Number(next[k]) > 0)) next[k] = DEFAULTS[k];
+    if (typeof next.font !== 'string' || !/^(sans|serif|system|custom:[\p{L}\p{N} ._()-]{1,80}\.(ttf|otf|woff2?))$/iu.test(next.font)) next.font = 'sans';
+    next.lines = Math.min(4, Math.max(1, Math.round(next.lines)));
+    const rebuild = JSON.stringify([next.langs, next.src]) !== JSON.stringify([cfg.langs, cfg.src]) || !document.getElementById('rows').children.length;
+    cfg = next;
+    const root = document.documentElement;
+    // La mida va per l'amplada però mai més alta del que hi cap (pantalles panoràmiques / LED)
+    root.style.setProperty('--size', `min(${cfg.size}vw, ${(cfg.size * 16 / 9).toFixed(2)}vh)`);
+    root.style.setProperty('--lines', cfg.lines);
+    Object.assign(root.dataset, { theme: cfg.theme, pos: cfg.pos, align: cfg.align, font: cfg.font.startsWith('custom:') ? 'custom' : cfg.font });
+    applyFont(cfg.font);
+    document.body.classList.toggle('notags', !cfg.tags);
+    if (rebuild) {
+      const rows = document.getElementById('rows');
+      rows.innerHTML = '';
+      for (const k of Object.keys(lanes)) delete lanes[k];
+      for (const k of (cfg.src ? ['src'] : []).concat(cfg.langs)) {
+        rows.insertAdjacentHTML('beforeend', `<div class="row ${k === 'src' ? 'src' : ''}"><span class="tag">${k === 'src' ? 'ORIG' : k.toUpperCase()}</span><div class="box"><div class="text" data-k="${k}"></div></div></div>`);
+        lanes[k] = { el: document.querySelector(`.text[data-k="${k}"]`), spans: new Map(), top: 0, lastMove: 0 };
+      }
+    }
+    // la mida o el nombre de línies canvien on cau cada línia: es torna a situar a la posició ACTUAL
+    // (abans tornava a la primera línia i el públic veia repetir frases de fa 20 s)
+    for (const l of Object.values(lanes)) l.resync = true;
+  }
+
+  // Tipografia pròpia: la serveix el servidor (/fonts/…), també a una pantalla d'un altre ordinador i sense internet
+  function applyFont(font) {
+    const root = document.documentElement;
+    if (!font.startsWith('custom:')) { root.style.removeProperty('--font'); return; }
+    const file = font.slice(7);
+    const fam = 'Sub-' + file.replace(/[^\w]/g, '_');
+    let st = document.getElementById('custom-font');
+    if (!st) { st = document.createElement('style'); st.id = 'custom-font'; document.head.appendChild(st); }
+    const css = `@font-face { font-family: "${fam}"; src: url("/fonts/${encodeURIComponent(file)}"); font-display: swap; }`;
+    if (st.textContent !== css) st.textContent = css;
+    root.style.setProperty('--font', `"${fam}", "Helvetica Neue", Arial, sans-serif`);
+    // quan acaba de carregar, les línies es tornen a mesurar (canvia l'amplada de cada paraula)
+    document.fonts?.load(`40px "${fam}"`).then(() => { for (const l of Object.values(lanes)) l.resync = true; schedule?.(); }).catch(() => {});
+  }
+
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
+  // ─── Una fila ─────────────────────────────────────────────────────────────
+  function renderLane(k, blocks, now) {
+    const lane = lanes[k];
+    if (!lane) return;
+    const get = (b) => (k === 'src' ? b.src : b.tr?.[k]) || '';
+
+    // 1. Paraules que hi ha d'haver, amb una clau estable (frase:posició)
+    const want = [];
+    let prevSpeaker;
+    const lastId = blocks.length ? blocks[blocks.length - 1].id : null;
+    for (const b of blocks) {
+      // Una «paraula» llarguíssima (una adreça, text sense espais) es parteix: si no, es tallaria a la vora
+      const words = get(b).trim().split(/\s+/).filter(Boolean).flatMap((w) => (w.length > 24 ? w.match(/.{1,20}/gu) : [w]));
+      if (!words.length) continue;
+      const brk = prevSpeaker !== undefined && b.speaker !== prevSpeaker;
+      prevSpeaker = b.speaker;
+      words.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0 }));
+    }
+
+    // 2. Reconcilia amb el que ja hi ha (sense refer el DOM: així no salta res)
+    const keep = new Set(want.map((x) => x.key));
+    for (const [key, span] of lane.spans) if (!keep.has(key)) { span.remove(); lane.spans.delete(key); }
+    // Seqüència de nodes desitjada: [separador] paraula [separador] paraula…
+    // Cada paraula té els seus separadors guardats; només es mou el que no és al lloc
+    // (moure un node li talla la transició i la paraula no acabaria d'aparèixer).
+    const seq = [];
+    want.forEach((x, i) => {
+      let span = lane.spans.get(x.key);
+      if (!span) {
+        span = document.createElement('span');
+        span.className = 'w wait';
+        span.textContent = x.w;
+        span._space = document.createTextNode(' ');
+        span._br = document.createElement('br');
+        lane.spans.set(x.key, span);
+      } else if (span.textContent !== x.w) {
+        span.textContent = x.w;
+      }
+      span.classList.toggle('old', x.old);
+      if (i > 0) seq.push(x.brk ? span._br : span._space);
+      seq.push(span);
+    });
+    seq.forEach((node, i) => {
+      const at = lane.el.childNodes[i];
+      if (at !== node) lane.el.insertBefore(node, at || null);
+    });
+    while (lane.el.childNodes.length > seq.length) lane.el.lastChild.remove();
+
+    // 3. Mesura on cau cada línia
+    const lines = [];
+    let lastTop = -1;
+    for (const x of want) {
+      const span = lane.spans.get(x.key);
+      const t = span.offsetTop;
+      if (!lines.length || t > lastTop + 2) { lines.push({ top: t, spans: [] }); lastTop = t; }
+      lines[lines.length - 1].spans.push(span);
+    }
+    const N = cfg.lines;
+    const target = Math.max(0, lines.length - N);
+
+    // 4. Puja com a molt UNA línia cada «dwell» segons. Si s'acumula massa feina,
+    //    s'escurça l'espera (i si ens quedem molt enrere, es salta) perquè
+    //    la pantalla no vagi mai massa per darrere del que es diu.
+    if (lane.resync) { lane.top = target; lane.lastMove = now; lane.resync = false; }
+    if (lane.top > target) lane.top = target;
+    if (lane.top < target) {
+      const behind = target - lane.top;
+      const dwell = cfg.dwell * 1000 * (behind >= 3 ? 0.35 : behind === 2 ? 0.6 : 1);
+      if (behind > 5) { lane.top = target - 2; lane.lastMove = now; }
+      else if (now - lane.lastMove >= dwell) { lane.top += 1; lane.lastMove = now; lane.stepAt = now; }
+    } else if (lane.lastMove === 0 || lines.length <= N) {
+      lane.lastMove = now;
+    }
+
+    // 5. Es veuen les línies [top, top+N); les de sota esperen el seu torn.
+    //    Ancorat a BAIX: amb menys de N línies, el text baixa fins a l'última posició,
+    //    així totes les llengües tenen sempre la línia nova al mateix lloc i
+    //    l'espai entre blocs no canvia (17/09/2026, «l'interlineat va canviant»).
+    lines.forEach((ln, i) => {
+      for (const s of ln.spans) { s.classList.toggle('wait', i >= lane.top + N); s.classList.toggle('gone', i < lane.top); }
+    });
+    const lh = lines.length > 1 ? lines[1].top - lines[0].top : parseFloat(getComputedStyle(lane.el).lineHeight) || 0;
+    const shown = Math.min(N, Math.max(0, lines.length - lane.top));
+    const y = lines.length ? (N - shown) * lh - lines[lane.top].top : 0;
+    lane.el.style.transform = `translateY(${y}px)`;
+    lane.backlog = target - lane.top;
+  }
+
+  function render() {
+    try { renderNow(); }
+    catch (e) { console.error(e); document.getElementById('stage').classList.add('idle'); } // millor en blanc que congelada
+  }
+  function renderNow() {
+    if (!last) return;
+    const now = Date.now() + offset;
+    const all = last.blocks || [];
+    // Sense notícies del servidor fa >6 s (s'ha aturat, ha caigut, Wi-Fi): una frase a mitges NO es pot
+    // quedar congelada a la pantalla per sempre → s'esvaeix com si s'hagués acabat
+    const stale = !connected || Date.now() - lastMsgAt > 6000;
+    // El temps per esborrar compta des de l'última vegada que el text ha CANVIAT (les traduccions arriben
+    // després de la frase), i la pantalla no s'apaga mentre a alguna llengua li quedin línies per ensenyar
+    for (const b of all) { const sig = b.src + JSON.stringify(b.tr); const sn = seen.get(b.id); if (!sn) seen.set(b.id, { sig, at: b.tEnd }); else if (sn.sig !== sig) seen.set(b.id, { sig, at: now }); }
+    if (seen.size > 200) for (const id of [...seen.keys()]) if (!all.some((b) => b.id === id)) seen.delete(id);
+    const changedAt = (b) => Math.max(b.tEnd, seen.get(b.id)?.at || 0);
+    const active = all.some((b) => (!b.final && !stale) || now - changedAt(b) < cfg.clear * 1000)
+      || (!stale && Object.values(lanes).some((l) => l.backlog > 0 || Date.now() - (l.stepAt || 0) < cfg.dwell * 1500));
+    const stage = document.getElementById('stage');
+    if (!active || cfg.hidden) {
+      if (!stage.classList.contains('idle')) { stage.classList.add('idle'); if (!stale) resetAt = now; }
+      return;
+    }
+    stage.classList.remove('idle');
+    const blocks = all.filter((b) => b.t0 >= resetAt || !b.final);
+    const localNow = Date.now();
+    for (const k of Object.keys(lanes)) renderLane(k, blocks, localNow);
+
+    const cur = blocks[blocks.length - 1];
+    const sp = document.getElementById('speaker');
+    const show = cfg.speaker && cur?.speaker;
+    sp.classList.toggle('hide', !show);
+    if (show) {
+      sp.querySelector('span').textContent = cur.speaker;
+      const idx = (last.config?.speakers || []).indexOf(cur.speaker);
+      sp.style.setProperty('--dot', COLORS[(idx < 0 ? 0 : idx) % COLORS.length]);
+    }
+  }
+  const seen = new Map();
+  let connected = false, lastMsgAt = 0, rq = 0;
+  const schedule = () => { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); };
+  setInterval(schedule, 200);   // les línies pugen amb el temps, encara que no arribi res nou
+  addEventListener('resize', () => { for (const l of Object.values(lanes)) l.resync = true; schedule(); });
+
+  applyCfg(null);
+  function connect() {
+    const ws = new WebSocket(`ws://${location.host}/ws/pantalla`);
+    ws.onopen = () => { connected = true; lastMsgAt = Date.now(); };
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      if (msg.type !== 'state') return;
+      lastMsgAt = Date.now();
+      offset = msg.now - Date.now();
+      if (JSON.stringify(msg.display) !== JSON.stringify(last?.display)) applyCfg(msg.display);
+      last = msg;
+      schedule();
+    };
+    ws.onclose = () => { connected = false; setTimeout(connect, 1000); };
+    ws.onerror = () => {};
+    window._ws = ws;
+  }
+  // Connexió que es penja sense tancar-se (Wi-Fi): el servidor parla com a mínim cada 2 s
+  setInterval(() => {
+    if (!connected || Date.now() - lastMsgAt < 8000) return;
+    const o = window._ws; o.onclose = o.onmessage = null; try { o.close(); } catch {}
+    connected = false; connect();
+  }, 1000);
+  connect();
+  // Que la pantalla no s'apagui (només funciona a localhost; en un altre ordinador, vegeu LLEGEIX-ME)
+  let wl = null;
+  async function keepAwake() { try { if (!wl && document.visibilityState === 'visible') { wl = await navigator.wakeLock.request('screen'); wl.onrelease = () => { wl = null; }; } } catch {} }
+  document.addEventListener('visibilitychange', keepAwake);
+  document.addEventListener('click', keepAwake);
+  keepAwake();
+  if (!q.get('embed')) document.addEventListener('dblclick', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+</script>
+</body>
+</html>

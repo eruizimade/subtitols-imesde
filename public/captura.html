@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subtítols · Imesde</title>
+<link rel="icon" href="/brand/icon-green.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #f4f3ef; --cream-2: #edece6; --white: #fff;
+    --ink: #2b2b2b; --ink-soft: #62625e; --dark-2: #343430;
+    --green: #bce12a; --green-deep: #a3c414; --green-ink: #5f7207;
+    --line: rgba(43,43,43,.14); --line-strong: rgba(43,43,43,.3);
+    --red: #e5484d; --radius: 16px;
+    --font: "DM Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--cream); color: var(--ink); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--green); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* ─── Capçalera fosca amb els cercles ─── */
+  header { position: relative; overflow: clip; background: var(--ink); color: var(--cream); }
+  header::before, header::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
+  /* Els cercles de marca, petits i a la cantonada: abans passaven per darrere de «Començar» (verd sobre verd) */
+  header::before { width: 260px; height: 260px; right: -150px; top: -170px; border: 36px solid var(--green); }
+  header::after { width: 116px; height: 116px; right: -78px; top: -98px; background: var(--green); }
+  header.live::after { animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(.9); } }
+  .bar { position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; padding: 20px clamp(20px, 3vw, 40px); padding-right: 150px; flex-wrap: wrap; }
+  .brand img { height: 30px; display: block; }
+  .divider { width: 1px; height: 26px; background: rgba(244,243,239,.2); }
+  .title { font-size: 12.5px; letter-spacing: .22em; font-weight: 600; text-transform: uppercase; color: var(--green); display: flex; align-items: center; gap: 12px; }
+  .title::before { content: ""; width: 30px; height: 1px; background: var(--green); }
+  .stats { display: flex; gap: 18px; margin-left: auto; align-items: center; }
+  /* Amb finestres de menys de 1.600 px el rètol no hi cap amb tots els controls: fora (la finestra ja es diu així) */
+  @media (max-width: 1600px) { .title, .divider { display: none; } }
+  .stat { display: flex; flex-direction: column; line-height: 1.15; }
+  .stat b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: rgba(244,243,239,.55); }
+  /* Estat en píndola: verda i ben grossa en directe, que es vegi des de l'altra punta de la sala */
+  .status { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px; border-radius: 999px; background: rgba(244,243,239,.08); font-size: 13.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: rgba(244,243,239,.7); }
+  .status i { width: 10px; height: 10px; border-radius: 50%; background: rgba(244,243,239,.4); }
+  .live .status { background: var(--green); color: var(--ink); }
+  .live .status i { background: var(--ink); box-shadow: 0 0 0 0 rgba(43,43,43,.6); animation: ring 1.6s infinite; }
+  @keyframes ring { to { box-shadow: 0 0 0 8px rgba(43,43,43,0); } }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 999px; font-weight: 600; letter-spacing: .01em; cursor: pointer; border: 1px solid transparent; padding: 11px 22px; font-size: 14.5px; transition: transform .25s, box-shadow .25s, background .25s, border-color .25s, color .25s; white-space: nowrap; }
+  .btn:disabled { opacity: .45; cursor: default; transform: none !important; box-shadow: none !important; }
+  .btn-green { background: var(--green); color: var(--ink); }
+  .btn-green:hover { background: var(--green-deep); transform: translateY(-2px); box-shadow: 0 10px 28px rgba(163,196,20,.4); }
+  .btn-stop { background: var(--cream); color: var(--ink); }
+  .btn-stop:hover { background: #fff; }
+  .btn-ghost { border-color: var(--line-strong); background: transparent; }
+  .btn-ghost:hover { border-color: var(--ink); }
+  .btn-sm { padding: 7px 14px; font-size: 13px; }
+  .btn-big { padding: 15px 34px; font-size: 17px; font-weight: 700; min-width: 190px; }
+  header .btn-green { box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 8px 24px rgba(188,225,42,.25); }
+  header .btn-stop { background: var(--cream); color: var(--ink); }
+  header .btn-stop.armed { background: var(--red); color: #fff; }
+  .btn-hide { padding: 13px 20px; font-size: 14.5px; font-weight: 600; background: transparent; color: var(--cream); border: 1px solid rgba(244,243,239,.35); min-width: 170px; }
+  .btn-hide:hover { border-color: var(--cream); }
+  .btn-hide.on { background: #ffb547; color: var(--ink); border-color: #ffb547; font-weight: 700; }
+
+  /* ─── Graella ─── */
+  main { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 22px; padding: 26px clamp(16px, 3vw, 40px) 40px; max-width: 1600px; margin: 0 auto; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } .bar { padding-right: clamp(20px, 3vw, 40px); } header::before { width: 300px; height: 300px; border-width: 40px; right: -170px; top: -190px; opacity: .9; } header::after { width: 134px; height: 134px; right: -87px; top: -107px; } .stats { margin-left: 0; width: 100%; } .stats .btn { margin-left: auto; } }
+  .col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .card { background: var(--white); border-radius: var(--radius); padding: 22px; border: 1px solid var(--line); }
+  .kicker { display: flex; align-items: center; gap: 12px; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--green-ink); margin: 0 0 16px; }
+  .kicker::after { content: ""; height: 1px; flex: 1; max-width: 60px; background: var(--green); order: 1; }
+  .kicker .right { order: 2; }
+  .kicker .n { color: var(--ink-soft); font-weight: 600; letter-spacing: .08em; }
+  .kicker .right { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 500; color: var(--ink-soft); }
+  .hint { font-size: 13px; color: var(--ink-soft); margin: 10px 0 0; }
+  label.f { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 14px; }
+  select, input[type=text], textarea { width: 100%; background: var(--cream); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; font-size: 14.5px; color: var(--ink); outline: none; transition: border-color .2s, background .2s; }
+  select:focus, input[type=text]:focus, textarea:focus { border-color: var(--green-deep); background: #fff; }
+  textarea { min-height: 84px; resize: vertical; line-height: 1.45; }
+
+  .meter { height: 8px; border-radius: 99px; background: var(--cream-2); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--green); border-radius: 99px; transition: width .09s linear; }
+  .meter.big { height: 16px; margin: 4px 0 2px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line-strong); background: transparent; border-radius: 999px; padding: 6px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .2s; }
+  .chip:hover { border-color: var(--ink); }
+  .chip.on { background: var(--ink); color: var(--green); border-color: var(--ink); }
+  .seg { display: inline-flex; background: var(--cream); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+  .seg button { border: 0; background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--ink-soft); }
+  .seg button.on { background: var(--ink); color: var(--cream); }
+
+  /* Ponents */
+  .speakers { display: flex; flex-direction: column; gap: 10px; }
+  .sp { display: grid; grid-template-columns: 26px 1fr 110px 30px; gap: 8px; align-items: center; padding: 8px 8px 10px; border-radius: 12px; background: var(--cream); position: relative; transition: box-shadow .2s, background .2s; }
+  .sp.active { background: #f6fbe1; box-shadow: inset 0 0 0 2px var(--green); }
+  .sp .dot { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--c); justify-self: center; background: radial-gradient(circle, var(--c) 0 28%, transparent 30%); }
+  .sp input, .sp select { background: #fff; padding: 7px 10px; font-size: 14px; }
+  .sp .x { border: 0; background: transparent; cursor: pointer; font-size: 18px; color: var(--ink-soft); border-radius: 50%; height: 30px; }
+  .sp .x:hover { background: #fff; color: var(--ink); }
+  .sp .meter { grid-column: 2 / 4; height: 5px; }
+  .sp .meter i { background: var(--c); }
+  .empty { font-size: 13.5px; color: var(--ink-soft); padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 12px; }
+
+  /* Previsualització */
+  /* La vista prèvia, no més alta del 40% de la finestra: si no, se'n menjava la transcripció */
+  .preview { position: relative; aspect-ratio: 16 / 9; width: min(100%, calc(40vh * 16 / 9)); margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
+  .preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin-top: 16px; }
+  .toolbar .grp { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+  input[type=range] { accent-color: var(--green-deep); width: 110px; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-soft); user-select: none; }
+  .switch input { display: none; }
+  .switch span { width: 34px; height: 20px; border-radius: 99px; background: var(--cream-2); position: relative; transition: background .2s; border: 1px solid var(--line); }
+  .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+  .switch input:checked + span { background: var(--green); }
+  .switch input:checked + span::after { transform: translateX(14px); }
+  .urls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
+  .urls code { background: var(--cream); padding: 4px 10px; border-radius: 8px; color: var(--ink); cursor: pointer; }
+  .urls code:hover { background: var(--cream-2); }
+
+  /* Transcripció */
+  .log { max-height: max(320px, calc(100vh - 560px)); overflow: auto; margin: 0 -8px; padding: 0 8px; scroll-behavior: smooth; }
+  .blk { display: grid; grid-template-columns: 62px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .blk:first-child { border-top: 0; }
+  .blk time { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; padding-top: 3px; }
+  .blk .who { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 3px; }
+  .blk .who i { width: 10px; height: 10px; border-radius: 50%; border: 3px solid var(--c); }
+  .blk .src { font-size: 16.5px; font-weight: 500; color: var(--ink); }
+  .blk.open .src::after { content: ""; display: inline-block; width: 2px; height: 1em; background: var(--green-deep); margin-left: 3px; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .blk .tr { display: grid; grid-template-columns: 28px 1fr; gap: 2px 8px; margin-top: 6px; font-size: 14px; color: var(--ink-soft); }
+  .blk .tr b { font-size: 10.5px; letter-spacing: .16em; color: var(--green-ink); padding-top: 3px; }
+  .blk.open .tr span { opacity: .75; }
+  .nolog { text-align: center; color: var(--ink-soft); padding: 40px 10px; font-size: 14px; }
+  .nolog .rings { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 50%; border: 12px solid var(--green); position: relative; }
+  .nolog .rings::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--green); }
+
+  .errors { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; max-width: 460px; z-index: 20; }
+  .errors div { background: var(--ink); color: var(--cream); border-left: 4px solid var(--red); padding: 10px 14px; border-radius: 10px; font-size: 13px; box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+  .file { display: flex; gap: 8px; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .file input[type=file] { display: none; }
+  .file .fname { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .muted { color: var(--ink-soft); }
+  select.fontsel { width: auto; max-width: 240px; padding: 6px 10px; font-size: 13px; font-weight: 600; }
+  /* Alarma: s'ha de veure des de l'altra punta de la sala */
+  #alarm { position: sticky; top: 0; z-index: 40; display: none; align-items: center; justify-content: center; gap: 14px; padding: 14px 20px; font-size: 20px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; text-align: center; }
+  #alarm.red { display: flex; background: var(--red); color: #fff; animation: alarmpulse 1s ease-in-out infinite; }
+  #alarm.amber { display: flex; background: #ffb547; color: var(--ink); font-size: 16px; }
+  #alarm small { font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0; opacity: .9; }
+  @keyframes alarmpulse { 50% { filter: brightness(1.25); } }
+  .toasts { position: fixed; left: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; max-width: 460px; z-index: 20; }
+  .toasts div { background: var(--ink); color: var(--cream); padding: 10px 14px; border-radius: 10px; font-size: 13px; box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+</style>
+</head>
+<body>
+<div id="alarm"></div>
+<header id="hdr">
+  <div class="bar">
+    <a class="brand" href="https://www.imesde.cat" target="_blank" rel="noopener"><img src="/brand/logo-green.png" alt="Imesde"></a>
+    <span class="divider"></span>
+    <span class="title">Subtítols en directe</span>
+    <div class="stats">
+      <span class="status"><i></i><span id="statusTxt">Aturat</span></span>
+      <div class="stat"><b id="timer">0:00</b><span>temps</span></div>
+      <div class="stat"><b id="lat">—</b><span>traducció</span></div>
+      <button class="btn btn-hide" id="hideBtn" title="Durant la música o el descans: al públic no li surt res">Pantalla visible</button>
+      <button class="btn btn-green btn-big" id="go">Començar →</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="card">
+      <h2 class="kicker"><span class="n">01</span> Entrada</h2>
+      <label class="f">Targeta o micròfon
+        <select id="device"><option value="">Micròfon per defecte</option></select>
+      </label>
+      <div class="meter big"><i id="lvl"></i></div>
+      <p class="hint" id="inputHint">Activa l'entrada per veure el nivell i els canals.</p>
+      <label class="switch" style="margin-top:12px"><input type="checkbox" id="enhance"><span></span>Millora de veu (micro de l’ordinador)</label>
+      <p class="hint" style="margin-top:4px">Treu soroll i puja el volum de la veu. Apaga-la si entres per la taula de so.</p>
+      <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" id="arm">Activar entrada</button></div>
+      <div class="file">
+        <input type="file" id="file" accept="audio/*,video/*"><label for="file" class="btn btn-ghost btn-sm">Tria un fitxer…</label><span class="fname" id="fname">Enregistrament per provar sense micro</span>
+        <label class="switch"><input type="checkbox" id="monitor"><span></span>escoltar</label>
+        <button class="btn btn-ghost btn-sm" id="goFile">Reproduir ▶</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="kicker"><span class="n">02</span> Idiomes</h2>
+      <label class="f">Transcripció</label>
+      <div class="seg" id="mode" style="margin:-6px 0 6px"></div>
+      <p class="hint" style="margin:0 0 16px" id="modeHint"></p>
+      <label class="f">Es parla en</label>
+      <div class="seg" id="srcLang" style="margin:-6px 0 16px"></div>
+      <label class="f">Subtítols en</label>
+      <div class="chips" id="targets" style="margin-top:-6px"></div>
+      <p class="hint">L’ordre a la pantalla és l’ordre en què els marques (el número).</p>
+    </section>
+
+    <section class="card">
+      <h2 class="kicker"><span class="n">03</span> Context</h2>
+      <textarea id="prompt" placeholder="Acte, intèrprets, obres, noms propis… Ex.: Concert de l'Orfeó Català dirigit per Xavier Puig. Rèquiem de Mozart."></textarea>
+      <p class="hint">Ajuda a escriure bé els noms. Es pot canviar en directe (s’aplica a la pròxima pausa).</p>
+      <p class="hint" id="guioInfo"></p>
+    </section>
+
+    <section class="card">
+      <h2 class="kicker"><span class="n">04</span> Ponents <span class="right" id="spCount"></span></h2>
+      <div class="speakers" id="speakers"></div>
+      <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" id="addSp">+ Afegir ponent</button></div>
+      <p class="hint">Cada ponent al seu micro (canal de la targeta). El sistema escolta qui parla més fort i n'escriu el nom. Sense ponents, es barreja tot.</p>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card">
+      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
+      <div class="preview"><iframe id="pv" src="/pantalla?embed=1"></iframe></div>
+      <div class="toolbar">
+        <div class="grp">Fons <div class="seg" id="theme"></div></div>
+        <div class="grp">Tipografia <select id="fontSel" class="fontsel"></select><input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2" hidden><button class="btn btn-ghost btn-sm" id="fontDel" hidden title="Esborrar aquesta tipografia d’aquest ordinador">Esborrar</button></div>
+        <div class="grp">Mida <input type="range" id="size" min="2" max="6" step="0.1"></div>
+        <div class="grp">Línies <div class="seg" id="lines"></div></div>
+        <div class="grp">Posició <div class="seg" id="pos"></div></div>
+        <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
+        <label class="switch"><input type="checkbox" id="showSrc"><span></span>original</label>
+        <label class="switch"><input type="checkbox" id="showSpeaker"><span></span>ponent</label>
+        <label class="switch"><input type="checkbox" id="showTags"><span></span>etiquetes</label>
+        <label class="switch"><input type="checkbox" id="center"><span></span>centrat</label>
+        <label class="switch" title="Durant la música o el descans: la pantalla queda en blanc encara que el sistema escriba alguna cosa"><input type="checkbox" id="hideScreen"><span></span><b>amagar pantalla</b></label>
+      </div>
+      <div class="urls" id="urls"></div>
+    </section>
+
+    <section class="card">
+      <h2 class="kicker"><span class="n">06</span> Transcripció
+        <span class="right"><button class="btn btn-ghost btn-sm" id="clear">Netejar pantalla</button> <button class="btn btn-ghost btn-sm" id="download">Descarregar .txt</button></span>
+      </h2>
+      <div class="log" id="log"><div class="nolog"><div class="rings"></div>Quan comencis, aquí hi sortirà tot el que es digui i les traduccions.</div></div>
+    </section>
+  </div>
+</main>
+<div class="errors" id="errors"></div>
+<div class="toasts" id="toasts"></div>
+<div id="multi" hidden style="position:fixed;left:50%;top:104px;transform:translateX(-50%);z-index:30;background:#bce12a;color:#2b2b2b;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.2)"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const COLORS = ['#bce12a', '#4ea1ff', '#ffb547', '#ff6b8b', '#b58cff', '#3fd6c6'];
+const LANGS = { ca: 'Català', es: 'Castellà', en: 'Anglès', fr: 'Francès', it: 'Italià', de: 'Alemany', pt: 'Portuguès' };
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ─── Preferències (es recorden en aquest navegador) ───
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem('sub.' + k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem('sub.' + k, JSON.stringify(v)); } catch {} };
+const prefs = {
+  device: load('device', ''),
+  speakers: load('speakers', []),            // [{ name, channel }]
+  sourceLang: load('sourceLang', 'auto'),
+  mode: load('mode2', 'equilibrat'),
+  enhance: load('enhance', false), // per la taula de so ha d'anar APAGADA (l'AGC i el filtre de soroll fan mal)
+  targets: load('targets', ['ca', 'es', 'en']),
+  prompt: load('prompt', ''),
+  display: load('display', { size: 3.6, lines: 2, theme: 'imesde', pos: 'bottom', align: 'left', src: false, tags: true, speaker: true, clear: 8, dwell: 2.5 }),
+};
+
+// ─── Connexió ───
+let ws, running = false, startedAt = null, orphan = false;
+let connected = false, lastMsgAt = 0, lastState = null, wasRunning = false, stoppedBySelf = false, wasYou = false, lastBoot = null;
+const pageLoadedAt = Date.now();
+const AUTO_RESUME = new URLSearchParams(location.search).has('reprendre');
+if (AUTO_RESUME) history.replaceState(null, '', location.pathname); // només un cop
+const blocks = new Map();
+let lastStart = null;
+function send(o) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
+function sendConfig() { send({ type: 'config', config: configPayload() }); }
+function configPayload() {
+  return { mode: prefs.mode, sourceLang: prefs.sourceLang, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name) };
+}
+function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets } }); }
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws/captura`);
+  ws.binaryType = 'arraybuffer';
+  // En connectar NO s'envia res: si hi ha una sessió en marxa (o un altre panell obert),
+  // obrir aquesta pestanya no li ha de canviar la configuració. Només s'envia si no hi ha res.
+  ws.onopen = () => { firstState = true; connected = true; lastMsgAt = Date.now(); };
+  ws.onmessage = (e) => { lastMsgAt = Date.now(); try { onState(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+  ws.onclose = () => { connected = false; setTimeout(connect, 1000); };
+  ws.onerror = () => {};
+}
+// El servidor envia l'estat com a mínim cada 2 s: si en passen 6 sense res, la connexió és morta
+// encara que el navegador no ho hagi detectat (Wi-Fi que es penja sense tancar) → es refà
+setInterval(() => {
+  if (!connected || Date.now() - lastMsgAt < 6000) return;
+  // Un socket mort pot trigar un minut a «tancar-se»: s'abandona i se n'obre un de nou ara
+  const old = ws; old.onclose = old.onmessage = null; try { old.close(); } catch {}
+  connected = false; connect();
+}, 1000);
+
+let firstState = true;
+function onState(s) {
+  if (s.type !== 'state') return;
+  if (firstState) {
+    firstState = false;
+    if (sending && s.running && !s.you) send({ type: 'claim' });                          // tall de xarxa: reprèn sol
+    // Només si el servidor és NOU (s'ha reiniciat): si algú ha aturat la sessió a posta, no es torna a engegar
+    else if (sending && !s.running && lastBoot && s.bootId && s.bootId !== lastBoot) { send({ type: 'start', config: configPayload() }); sendDisplay(); toast('El servidor s’havia reiniciat: es torna a començar sol'); }
+    else if (sending && !s.running) { sending = false; stoppedAlarm = Date.now(); }
+    // L'app autònoma recarrega el panell amb ?reprendre=1 si s'ha penjat: es reprèn sol, sense clic
+    else if (AUTO_RESUME && !sending && s.running && !s.hasOwner) {
+      armMic().then(() => { send({ type: 'claim' }); sending = true; stoppedAlarm = 0; sendingSince = Date.now(); toast('Panell recuperat: es continua enviant'); })
+        .catch((e) => toast('No s’ha pogut reprendre sol: prem «Continuar aquí» (' + e.message + ')'));
+    }
+    else { if (!s.running) sendConfig(); if (!s.display) sendDisplay(); }
+  } else if (wasRunning && !s.running && sending && !stoppedBySelf) {
+    // El servidor s'ha aturat sense que ningú ho demanés des d'aquí: que es vegi, i que un sol clic torni a començar
+    sending = false;
+    stoppedAlarm = Date.now();
+  }
+  wasRunning = s.running;
+  if (s.bootId) lastBoot = s.bootId;
+  if (s.running) { stoppedBySelf = false; stoppedAlarm = 0; }
+  lastState = s;
+  if (Array.isArray(s.fonts) && JSON.stringify(s.fonts) !== fontsKnown) renderFonts(s.fonts);
+  if (s.display && typeof s.display.hidden === 'boolean' && $('hideScreen').checked !== s.display.hidden) { $('hideScreen').checked = s.display.hidden; prefs.display.hidden = s.display.hidden; syncHideBtn(); }
+  running = s.running;
+  startedAt = s.startedAt;
+  if (s.startedAt && s.startedAt !== lastStart) { lastStart = s.startedAt; blocks.clear(); }
+  $('hdr').classList.toggle('live', running);
+  // Sessió en marxa però sense cap panell emetent (p. ex. s'ha recarregat la pàgina): es pot reprendre
+  orphan = running && !s.hasOwner && !sending;
+  // Un altre panell s'ha quedat l'àudio: només quan PASSA (érem nosaltres i ja no), no en el mateix
+  // estat en què acabem de demanar-lo de nou (si no, el panell deixava d'enviar sense dir res)
+  if (sending && running && s.hasOwner && wasYou && s.you === false) { sending = false; toast('Un altre panell s’ha quedat l’àudio'); }
+  wasYou = !!s.you;
+  $('statusTxt').textContent = orphan ? 'En pausa' : running ? 'En directe' : 'Aturat';
+  $('go').textContent = orphan ? 'Continuar aquí ▶' : running ? 'Aturar ■' : 'Començar →';
+  $('go').className = 'btn btn-big ' + (running && !orphan ? 'btn-stop' : 'btn-green');
+  if ((running || sending) && Date.now() - stopArmedAt < 3000) { $('go').textContent = 'Segur? Clica per aturar'; $('go').classList.add('armed'); }
+  $('goFile').disabled = running;
+  $('multi').hidden = !(s.operators > 1);
+  $('multi').textContent = `Tens ${s.operators} panells de captura oberts. Només n’emet un: tanca els altres.`;
+  $('guioInfo').textContent = s.guio ? `Guió carregat: ${s.guio.from} · ${s.guio.n} frases` : 'Sense guió (vegeu LLEGEIX-ME)';
+  // El cost no es mostra a posta: el panell el pot veure el client (queda als registres de sessions/)
+  $('lat').textContent = s.latency?.translate != null ? (s.latency.translate / 1000).toFixed(1).replace('.', ',') + ' s' : '—';
+  for (const b of s.blocks || []) blocks.set(b.id, b);
+  if (!(s.blocks || []).length && !running) { /* netejat */ }
+  if (s.cleared) blocks.clear();
+  renderLog();
+  $('errors').innerHTML = (s.errors || []).slice(-3).map((e) => `<div>${esc(e)}</div>`).join('');
+}
+
+// ─── Salut: una sola alarma, la més greu, ben grossa ───
+let lastFrameAt = 0, stoppedAlarm = 0, upstreamDownSince = 0, sendingSince = 0;
+function health() {
+  const now = Date.now();
+  if (lastState?.upstream && lastState.upstream !== 'open' && lastState.running) upstreamDownSince ||= now; else upstreamDownSince = 0;
+  const textAgo = lastState?.lastText ? (lastState.now - lastState.lastText) / 1000 : 0;
+  let red = '', amber = '';
+  if (!connected && now - pageLoadedAt > 3000) red = 'Servidor desconnectat <small>Mira el Terminal on corre el servidor. Es reconnecta sol.</small>';
+  else if (lastState?.fatal) red = esc(lastState.fatal) + ' <small>Sense això no surt cap subtítol</small>';
+  else if (stoppedAlarm) red = 'La sessió s’ha aturat <small>Prem «Començar» per tornar-hi</small>';
+  else if (sending && ctx?.state && ctx.state !== 'running') red = 'Àudio aturat pel navegador <small>Clica en qualsevol lloc de la pàgina</small>';
+  else if (sending && now - sendingSince > 2500 && performance.now() - lastFrameAt > 1500) red = 'No arriba àudio de l’entrada <small>Comprova la targeta / el cable. Es reintenta sola.</small>';
+  else if (upstreamDownSince && now - upstreamDownSince > 4000) red = 'Sense connexió amb OpenAI <small>Comprova internet. Es reconnecta sola i l’àudio es guarda uns segons.</small>';
+  else if (running && lastState?.display?.hidden) amber = 'La pantalla està AMAGADA <small>Desmarca «amagar pantalla» quan torni a parlar algú</small>';
+  else if (running && !lastState?.hasOwner) amber = 'Cap panell no envia àudio <small>Prem «Continuar aquí»</small>';
+  else if (sending && running && textAgo > 120) amber = `Fa ${Math.floor(textAgo / 60)} min que no surt text <small>Normal si sona música. Si algú parla i no surt res, mira el nivell d’entrada.</small>`;
+  const el = $('alarm');
+  el.className = red ? 'red' : amber ? 'amber' : '';
+  const html = red || amber;
+  if (el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; }
+}
+setInterval(health, 500);
+setInterval(() => {
+  if (!running || !startedAt) return;
+  const t = Math.floor((Date.now() - startedAt) / 1000);
+  $('timer').textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}, 500);
+
+// ─── Transcripció ───
+let logPinned = true;
+$('log').addEventListener('scroll', () => { const l = $('log'); logPinned = l.scrollHeight - l.scrollTop - l.clientHeight < 40; });
+let logRq = 0;
+function renderLog() { if (logRq) return; logRq = requestAnimationFrame(() => { logRq = 0; renderLogNow(); }); }
+function renderLogNow() {
+  if (blocks.size > 3000) { const ids = [...blocks.keys()].sort((a, b) => a - b); for (const id of ids.slice(0, blocks.size - 2000)) blocks.delete(id); }
+  const list = [...blocks.values()].sort((a, b) => a.id - b.id).slice(-150);
+  if (!list.length) return;
+  const el = $('log');
+  el.innerHTML = list.map((b) => {
+    const idx = prefs.speakers.findIndex((s) => s.name === b.speaker);
+    const c = COLORS[(idx < 0 ? 0 : idx) % COLORS.length];
+    const t = new Date(b.t0).toLocaleTimeString('ca-ES');
+    const tr = prefs.targets.filter((l) => b.tr?.[l] && b.tr[l] !== b.src).map((l) => `<b>${l.toUpperCase()}</b><span>${esc(b.tr[l])}</span>`).join('');
+    return `<div class="blk ${b.final ? '' : 'open'}" style="--c:${c}"><time>${t}</time><div>` +
+      (b.speaker ? `<div class="who"><i></i>${esc(b.speaker)}</div>` : '') +
+      `<div class="src">${esc(b.src)}</div>${tr ? `<div class="tr">${tr}</div>` : ''}</div></div>`;
+  }).join('');
+  if (logPinned) el.scrollTop = el.scrollHeight;
+}
+$('clear').onclick = () => { send({ type: 'clear' }); blocks.clear(); $('log').innerHTML = ''; };
+$('download').onclick = () => {
+  const list = [...blocks.values()].filter((b) => b.final).sort((a, b) => a.id - b.id);
+  const txt = list.map((b) => `[${new Date(b.t0).toLocaleTimeString('ca-ES')}]${b.speaker ? ' ' + b.speaker + ':' : ''} ${b.src}\n` +
+    prefs.targets.filter((l) => b.tr?.[l]).map((l) => `    ${l.toUpperCase()}: ${b.tr[l]}`).join('\n')).join('\n\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+  a.download = `subtitols-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.txt`;
+  a.click();
+};
+
+// ─── Idiomes i context ───
+const MODE_HINTS = { equilibrat: "El recomanat: bona precisió i poc retard.", rapid: "El text surt a l’instant, però s’equivoca una mica més.", precis: "Només amb un senyal molt net (taula de so): amb soroll de sala no treu gairebé res." };
+function renderMode() {
+  $('mode').innerHTML = [['equilibrat', 'Equilibrat'], ['rapid', 'Ràpid'], ['precis', 'Whisper']].map(([k, v]) => `<button data-v="${k}" class="${prefs.mode === k ? 'on' : ''}">${v}</button>`).join('');
+  $('modeHint').textContent = MODE_HINTS[prefs.mode] || '';
+}
+$('mode').onclick = (e) => {
+  const v = e.target.dataset.v; if (!v) return;
+  prefs.mode = v; save('mode2', v); renderMode(); sendConfig();
+  if (running) toast('El mode nou s’aplica a la pròxima pausa.');
+};
+function renderLangs() {
+  $('srcLang').innerHTML = [['auto', 'Automàtic'], ...Object.entries(LANGS).slice(0, 3)].map(([k, v]) => `<button data-v="${k}" class="${prefs.sourceLang === k ? 'on' : ''}">${v}</button>`).join('');
+  // L'ordre dels subtítols a la pantalla és l'ordre en què es marquen (el número ho diu)
+  $('targets').innerHTML = Object.entries(LANGS).map(([k, v]) => { const n = prefs.targets.indexOf(k); return `<button class="chip ${n >= 0 ? 'on' : ''}" data-v="${k}">${n >= 0 && prefs.targets.length > 1 ? `${n + 1}·` : ''}${v}</button>`; }).join('');
+}
+$('srcLang').onclick = (e) => {
+  const v = e.target.dataset.v; if (!v) return;
+  prefs.sourceLang = v; save('sourceLang', v); renderLangs(); sendConfig();
+  if (running) toast('L’idioma nou s’aplica a la pròxima pausa.');
+};
+$('targets').onclick = (e) => {
+  const v = e.target.dataset.v; if (!v) return;
+  const on = prefs.targets.includes(v);
+  if (on && prefs.targets.length === 1) return;
+  prefs.targets = on ? prefs.targets.filter((t) => t !== v) : [...prefs.targets, v];
+  save('targets', prefs.targets); renderLangs(); sendConfig(); sendDisplay();
+};
+$('prompt').value = prefs.prompt;
+let promptT;
+// En directe, canviar el context renova la sessió d'OpenAI: s'envia en SORTIR del camp (no a cada tecla)
+$('prompt').oninput = () => { prefs.prompt = $('prompt').value; save('prompt', prefs.prompt); clearTimeout(promptT); if (!running) promptT = setTimeout(sendConfig, 500); };
+$('prompt').onchange = () => { if (running) { sendConfig(); toast('Context nou: s’aplica a la pròxima pausa'); } };
+function toast(t) { const d = document.createElement('div'); d.textContent = t; $('toasts').appendChild(d); setTimeout(() => d.remove(), 5000); }
+
+// ─── Ponents ───
+let channelCount = 0;
+function renderSpeakers() {
+  const list = $('speakers');
+  if (!prefs.speakers.length) { list.innerHTML = '<div class="empty">Cap ponent: s’escolta la barreja de tots els canals.</div>'; }
+  else list.innerHTML = prefs.speakers.map((s, i) => {
+    const opts = Array.from({ length: Math.max(channelCount, s.channel + 1, 2) }, (_, c) => `<option value="${c}" ${c === s.channel ? 'selected' : ''}>Canal ${c + 1}</option>`).join('');
+    return `<div class="sp" data-i="${i}" style="--c:${COLORS[i % COLORS.length]}"><span class="dot"></span>` +
+      `<input type="text" value="${esc(s.name)}" placeholder="Nom del ponent" data-f="name">` +
+      `<select data-f="channel">${opts}</select><button class="x" title="Treure">×</button>` +
+      `<span></span><div class="meter"><i></i></div></div>`;
+  }).join('');
+  $('spCount').textContent = prefs.speakers.length ? `${prefs.speakers.length} ${prefs.speakers.length === 1 ? 'ponent' : 'ponents'}` : '';
+  node?.port.postMessage({ channels: prefs.speakers.map((s) => s.channel) });
+}
+$('addSp').onclick = () => {
+  const used = new Set(prefs.speakers.map((s) => s.channel));
+  let ch = 0; while (used.has(ch)) ch++;
+  prefs.speakers.push({ name: '', channel: ch });
+  save('speakers', prefs.speakers); renderSpeakers(); sendConfig();
+  $('speakers').querySelector('.sp:last-child input')?.focus();
+};
+$('speakers').addEventListener('input', (e) => {
+  const row = e.target.closest('.sp'); if (!row) return;
+  const s = prefs.speakers[row.dataset.i];
+  if (e.target.dataset.f === 'name') s.name = e.target.value;
+  if (e.target.dataset.f === 'channel') { s.channel = Number(e.target.value); node?.port.postMessage({ channels: prefs.speakers.map((x) => x.channel) }); }
+  save('speakers', prefs.speakers); sendConfig();
+});
+$('speakers').addEventListener('click', (e) => {
+  if (!e.target.classList.contains('x')) return;
+  prefs.speakers.splice(e.target.closest('.sp').dataset.i, 1);
+  save('speakers', prefs.speakers); renderSpeakers(); sendConfig();
+});
+
+// ─── Àudio ───
+let ctx, node, micSrc, stream, fileSrc, sending = false;
+async function listDevices() {
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+  if (!devs.some((d) => d.label)) return;
+  $('device').innerHTML = devs.map((d) => `<option value="${d.deviceId}">${esc(d.label)}</option>`).join('');
+  if (devs.some((d) => d.deviceId === prefs.device)) $('device').value = prefs.device;
+}
+async function ensureContext() {
+  if (ctx) { if (ctx.state === 'suspended') await ctx.resume(); return; }
+  ctx = new AudioContext({ sampleRate: 24000 });
+  if (ctx.sampleRate !== 24000) toast('⚠ El navegador no ha acceptat 24 kHz (' + ctx.sampleRate + '): usa Chrome');
+  // Chrome pot suspendre l'àudio (repòs, canvi de sortida, pestanya amagada): es reprèn sol
+  ctx.onstatechange = () => { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); };
+  await ctx.audioWorklet.addModule('/pcm-worklet.js');
+  node = new AudioWorkletNode(ctx, 'pcm-sender', { numberOfInputs: 1, numberOfOutputs: 0, channelCountMode: 'max' });
+  node.port.postMessage({ channels: prefs.speakers.map((s) => s.channel) });
+  node.port.onmessage = (e) => {
+    const { frame, levels, speaker } = e.data;
+    lastFrameAt = performance.now();
+    if (sending && ws?.readyState === 1 && ws.bufferedAmount < 1e6) ws.send(frame);
+    const peak = Math.max(...levels);
+    $('lvl').style.width = Math.min(100, Math.sqrt(peak) * 260) + '%';
+    document.querySelectorAll('.sp').forEach((row, i) => {
+      row.querySelector('.meter i').style.width = Math.min(100, Math.sqrt(levels[i] || 0) * 260) + '%';
+      row.classList.toggle('active', speaker === i && (levels[i] || 0) > 0.004);
+    });
+  };
+}
+// Una sola obertura d'entrada alhora (canviar ràpid de targeta i de millora en deixava dues connectades)
+let armChain = Promise.resolve();
+function armMic(opts) { const p = armChain.then(() => armMicNow(opts)); armChain = p.catch(() => {}); return p; }
+let missingWarned = false;
+async function armMicNow(opts = {}) {
+  await ensureContext();
+  stream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+  micSrc?.disconnect();
+  // Un re-armat AUTOMÀTIC (la targeta ha caigut) torna SEMPRE a la targeta desada: mai no salta sol
+  // al micro de l'ordinador (es transcriuria la sala sense que ningú se n'adonés)
+  const dev = opts.auto ? prefs.device : $('device').value;
+  if (!opts.auto && prefs.device && ![...$('device').options].some((o) => o.value === prefs.device)) toast('⚠ La targeta desada no hi és: s’usa l’entrada per defecte');
+  stream = await navigator.mediaDevices.getUserMedia({ audio: {
+    deviceId: dev ? { exact: dev } : undefined,
+    channelCount: { ideal: prefs.enhance ? 1 : 32 }, echoCancellation: prefs.enhance, noiseSuppression: prefs.enhance, autoGainControl: prefs.enhance,
+  } });
+  const track = stream.getAudioTracks()[0];
+  const st = track.getSettings();
+  channelCount = st.channelCount || 1;
+  micSrc = ctx.createMediaStreamSource(stream);
+  if (!fileSrc) micSrc.connect(node);
+  // Si es desendolla la targeta, es torna a provar d'obrir cada pocs segons fins que torni
+  track.onended = () => { toast('S’ha perdut l’entrada d’àudio: es reintenta…'); reArm(); };
+  await listDevices();
+  const fx = st.echoCancellation || st.noiseSuppression || st.autoGainControl;
+  $('inputHint').textContent = `${track.label || 'Entrada'} · ${channelCount} ${channelCount === 1 ? 'canal' : 'canals'} · ${fx ? 'millora de veu ACTIVADA' : 'senyal net (sense filtres)'}`;
+  $('arm').textContent = 'Entrada activa ✓';
+  renderSpeakers();
+}
+$('enhance').checked = prefs.enhance;
+$('enhance').onchange = () => { prefs.enhance = $('enhance').checked; save('enhance', prefs.enhance); if (stream) armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message)); };
+$('arm').onclick = () => armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message));
+$('device').onchange = () => { prefs.device = $('device').value; save('device', prefs.device); if (stream) armMic().catch((e) => toast('No s’ha pogut obrir l’entrada: ' + e.message)); };
+let reArmT = 0, reArmDelay = 2000;
+function reArm() {
+  if (reArmT || fileSrc) return;
+  reArmT = setTimeout(() => {
+    reArmT = 0;
+    armMic({ auto: true }).then(() => { reArmDelay = 2000; if (prefs.device) $('device').value = prefs.device; })
+      .catch(() => { reArmDelay = Math.min(reArmDelay * 2, 15000); reArm(); });
+  }, reArmDelay);
+}
+navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
+  await listDevices().catch(() => {});
+  const t = stream?.getAudioTracks()[0];
+  const back = prefs.device && t?.getSettings().deviceId !== prefs.device && [...$('device').options].some((o) => o.value === prefs.device);
+  if (stream && (t?.readyState === 'ended' || back)) reArm();
+});
+// Vigilant de l'entrada: si fa 3 s que no arriba àudio mentre s'envia, es reprèn el context o es reobre l'entrada
+setInterval(() => {
+  if (!sending || fileSrc || !lastFrameAt || performance.now() - lastFrameAt < 3000) return;
+  if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+  else reArm();
+}, 1000);
+// Que ni la pantalla ni el Mac s'adormin mentre és oberta (només funciona a localhost; vegeu LLEGEIX-ME)
+let wakeLock = null;
+async function keepAwake() { try { if (!wakeLock && document.visibilityState === 'visible') { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.onrelease = () => { wakeLock = null; }; } } catch {} }
+document.addEventListener('visibilitychange', () => { keepAwake(); if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {}); });
+document.addEventListener('click', () => { keepAwake(); if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {}); });
+keepAwake();
+navigator.permissions?.query({ name: 'microphone' }).then((p) => { if (p.state === 'granted') listDevices(); }).catch(() => {});
+listDevices().catch(() => {});
+
+function startSending() {
+  stoppedAlarm = 0;
+  sendingSince = Date.now();
+  send({ type: 'start', config: configPayload() });
+  sendDisplay();
+  blocks.clear();
+  $('log').innerHTML = '';
+  sending = true;
+}
+function stopAll() {
+  sending = false;
+  stoppedBySelf = true;
+  stoppedAlarm = 0;
+  send({ type: 'stop' });
+  if (fileSrc) { try { fileSrc.stop(); } catch {} fileSrc.disconnect(); fileSrc = null; micSrc?.connect(node); }
+}
+let stopArmedAt = 0;
+$('go').onclick = async () => {
+  if (orphan) {
+    try { if (!stream) await armMic(); else await ensureContext(); send({ type: 'claim' }); sending = true; stoppedAlarm = 0; sendingSince = Date.now(); }
+    catch (e) { toast('No s’ha pogut obrir l’entrada: ' + e.message); }
+    return;
+  }
+  // Aturar demana un segon clic (en 3 s): un clic sense voler no pot apagar l'acte.
+  // (Res de confirm(): congela la pàgina i, mentre és oberta, no s'envia àudio.)
+  if (running || sending) {
+    if (Date.now() - stopArmedAt < 3000) { stopArmedAt = 0; stopAll(); }
+    else { stopArmedAt = Date.now(); $('go').textContent = 'Segur? Clica per aturar'; $('go').classList.add('armed'); setTimeout(() => { if (stopArmedAt && lastState) onState(lastState); }, 3100); }
+    return;
+  }
+  try { if (!stream) await armMic(); else await ensureContext(); startSending(); }
+  catch (e) { toast('No s’ha pogut obrir l’entrada: ' + e.message); }
+};
+$('file').onchange = () => { $('fname').textContent = $('file').files[0]?.name || ''; };
+$('goFile').onclick = async () => {
+  const f = $('file').files[0];
+  if (!f) return toast('Tria primer un fitxer d’àudio o vídeo.');
+  await ensureContext();
+  $('goFile').disabled = true;
+  let buf;
+  try { buf = await ctx.decodeAudioData(await f.arrayBuffer()); }
+  catch (e) { $('goFile').disabled = running; return toast('No es pot llegir el fitxer: ' + e.message); }
+  micSrc?.disconnect();
+  fileSrc = ctx.createBufferSource();
+  fileSrc.buffer = buf;
+  fileSrc.connect(node);
+  if ($('monitor').checked) fileSrc.connect(ctx.destination);
+  fileSrc.onended = () => { if (fileSrc) stopAll(); };
+  startSending();
+  fileSrc.start();
+};
+
+// ─── Pantalla ───
+function seg(id, options, key) {
+  $(id).innerHTML = options.map(([v, t]) => `<button data-v="${v}" class="${String(prefs.display[key]) === String(v) ? 'on' : ''}">${t}</button>`).join('');
+  $(id).onclick = (e) => {
+    const v = e.target.dataset.v; if (v == null) return;
+    prefs.display[key] = isNaN(v) ? v : Number(v);
+    saveDisplay(); seg(id, options, key);
+  };
+}
+function saveDisplay() { save('display', prefs.display); sendDisplay(); }
+seg('theme', [['imesde', 'Imesde'], ['dark', 'Negre'], ['light', 'Crema'], ['dsk', 'DSK'], ['chroma', 'Croma'], ['transparent', 'Transp.']], 'theme');
+seg('lines', [[1, '1'], [2, '2'], [3, '3']], 'lines');
+seg('pos', [['bottom', 'Baix'], ['center', 'Mig'], ['top', 'Dalt']], 'pos');
+if (prefs.display.dwell == null) prefs.display.dwell = 2.5;
+seg('dwell', [[1.5, 'Àgil'], [2.5, 'Normal'], [3.5, 'Pausada']], 'dwell');
+$('size').value = prefs.display.size;
+$('size').oninput = () => { prefs.display.size = Number($('size').value); saveDisplay(); };
+for (const [id, key] of [['showSrc', 'src'], ['showSpeaker', 'speaker'], ['showTags', 'tags']]) {
+  $(id).checked = !!prefs.display[key];
+  $(id).onchange = () => { prefs.display[key] = $(id).checked; saveDisplay(); };
+}
+prefs.display.hidden = false; // en obrir el panell, la pantalla sempre visible
+
+// ─── Tipografia (de sèrie o pròpia, pujada al servidor) ───
+const BUILTIN_FONTS = [['sans', 'DM Sans (Imesde)'], ['serif', 'Source Serif'], ['system', 'Helvetica']];
+let fontsKnown = null;
+function renderFonts(list) {
+  fontsKnown = JSON.stringify(list);
+  const cur = prefs.display.font || 'sans';
+  $('fontSel').innerHTML = BUILTIN_FONTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('') +
+    (list.length ? `<optgroup label="Pròpies">${list.map((f) => `<option value="custom:${esc(f)}">${esc(f.replace(/\.(ttf|otf|woff2?)$/i, ''))}</option>`).join('')}</optgroup>` : '') +
+    '<option value="__upload">Carregar tipografia…</option>';
+  $('fontSel').value = [...$('fontSel').options].some((o) => o.value === cur) ? cur : 'sans';
+  $('fontDel').hidden = !$('fontSel').value.startsWith('custom:');
+}
+renderFonts([]);
+$('fontSel').onchange = () => {
+  const v = $('fontSel').value;
+  if (v === '__upload') { $('fontSel').value = prefs.display.font || 'sans'; return $('fontFile').click(); }
+  prefs.display.font = v; saveDisplay(); $('fontDel').hidden = !v.startsWith('custom:');
+};
+$('fontFile').onchange = async () => {
+  const f = $('fontFile').files[0]; $('fontFile').value = '';
+  if (!f) return;
+  try {
+    const r = await fetch('/fonts/' + encodeURIComponent(f.name), { method: 'POST', body: f });
+    if (!r.ok) throw new Error(await r.text());
+    const { name } = await r.json();
+    prefs.display.font = 'custom:' + name; saveDisplay();
+    renderFonts([...new Set([...(lastState?.fonts || []), name])].sort());
+    toast('Tipografia carregada: ' + name);
+  } catch (e) { toast('No s’ha pogut carregar la tipografia: ' + e.message); }
+};
+$('fontDel').onclick = async () => {
+  const v = $('fontSel').value; if (!v.startsWith('custom:')) return;
+  await fetch('/fonts/' + encodeURIComponent(v.slice(7)), { method: 'DELETE' }).catch(() => {});
+  prefs.display.font = 'sans'; saveDisplay(); toast('Tipografia esborrada');
+};
+function syncHideBtn() { const on = $('hideScreen').checked; $('hideBtn').classList.toggle('on', on); $('hideBtn').textContent = on ? 'Pantalla AMAGADA' : 'Pantalla visible'; }
+$('hideScreen').onchange = () => { prefs.display.hidden = $('hideScreen').checked; sendDisplay(); syncHideBtn(); toast(prefs.display.hidden ? 'Pantalla AMAGADA' : 'Pantalla visible'); };
+$('hideBtn').onclick = () => { $('hideScreen').checked = !$('hideScreen').checked; $('hideScreen').onchange(); };
+$('center').checked = prefs.display.align === 'center';
+$('center').onchange = () => { prefs.display.align = $('center').checked ? 'center' : 'left'; saveDisplay(); };
+$('openDisplay').onclick = () => window.open('/pantalla', 'subtitols-pantalla', 'width=1280,height=720');
+fetch('/info').then((r) => r.json()).then((info) => {
+  $('urls').innerHTML = '<span>Des d’un altre ordinador:</span>' +
+    (info.lan.length ? info.lan.map((u) => `<code title="Copiar">${u}/pantalla</code>`).join('') : '<span>sense xarxa</span>') +
+    `<span class="muted" style="margin-left:auto">traducció: ${esc(info.models.TRANSLATE_MODEL)}</span>`;
+  $('urls').onclick = (e) => { if (e.target.tagName === 'CODE') { navigator.clipboard.writeText(e.target.textContent); toast('Adreça copiada'); } };
+});
+
+renderMode();
+renderLangs();
+renderSpeakers();
+connect();
+</script>
+</body>
+</html>

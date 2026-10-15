@@ -1,0 +1,11 @@
+node_modules
+sessions
+.env
+# Res de clients ni de l'acte al repositori públic
+dist
+guio.json
+guio-revisio.txt
+guio-*/
+ACTE-*.md
+proves/*.wav
+.DS_Store
