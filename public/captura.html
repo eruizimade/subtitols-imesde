@@ -7,6 +7,7 @@
 <link rel="icon" href="/brand/icon-green.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&display=swap" rel="stylesheet">
+<script>try { if (JSON.parse(localStorage.getItem('sub.panelDark'))) document.documentElement.classList.add('dark'); } catch {}</script>
 <style>
   :root {
     --cream: #f4f3ef; --cream-2: #edece6; --white: #fff;
@@ -22,6 +23,24 @@
   ::selection { background: var(--green); }
   button, input, select, textarea { font: inherit; color: inherit; }
 
+
+  /* ─── Mode fosc del PANELL (la pantalla i la previsualització no en saben res: són un altre document) ─── */
+  .btn-theme { padding: 10px 13px; background: transparent; color: var(--cream); border: 1px solid rgba(244,243,239,.35); font-size: 16px; line-height: 1; }
+  .btn-theme:hover { border-color: var(--cream); }
+  html.dark { --ink-soft: #a6a5a0; --line: rgba(255,255,255,.1); --line-strong: rgba(255,255,255,.26); --cream-2: #2f302d; --green-ink: #bce12a; color-scheme: dark; }
+  html.dark body { background: #121312; color: #e8e7e2; }
+  html.dark .card { background: #1c1d1b; border-color: rgba(255,255,255,.07); }
+  html.dark select, html.dark input[type=text], html.dark textarea, html.dark .seg, html.dark .sp, html.dark .urls code { background: #2a2b28; color: #e8e7e2; }
+  html.dark select:focus, html.dark input[type=text]:focus, html.dark textarea:focus, html.dark .sp input, html.dark .sp select, html.dark .urls code:hover { background: #33342f; color: #e8e7e2; }
+  html.dark .seg button { color: #a6a5a0; }
+  html.dark .seg button.on { background: #e8e7e2; color: #121312; }
+  html.dark .chip.on { background: var(--green); color: #121312; border-color: var(--green); }
+  html.dark .chip:hover, html.dark .btn-ghost:hover { border-color: #e8e7e2; }
+  html.dark .btn-ghost { color: #e8e7e2; }
+  html.dark .blk .src { color: #e8e7e2; }
+  html.dark .sp .x:hover { background: #3a3b37; color: #e8e7e2; }
+  html.dark .empty { color: #a6a5a0; }
+  html.dark header { background: #1c1d1b; }
   /* ─── Capçalera fosca amb els cercles ─── */
   header { position: relative; overflow: clip; background: var(--ink); color: var(--cream); }
   header::before, header::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
@@ -61,6 +80,12 @@
   header .btn-green { box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 8px 24px rgba(188,225,42,.25); }
   header .btn-stop { background: var(--cream); color: var(--ink); }
   header .btn-stop.armed { background: var(--red); color: #fff; }
+  .smap { display: flex; flex-direction: column; gap: 8px; margin: -6px 0 8px; }
+  .smap-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .smap-row > b { width: 34px; font-size: 15px; letter-spacing: .08em; }
+  .smap-eq { color: var(--ink-soft); font-weight: 700; margin-right: 4px; }
+  .smap-res { margin-left: 8px; font-size: 13px; font-weight: 600; color: var(--green-ink); }
+  .smap-res i { font-style: normal; color: var(--ink-soft); font-weight: 500; }
   .qs-l { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); padding: 0 6px 0 8px; align-self: center; }
   .listen { min-width: 150px; font-weight: 700; background: var(--red, #d64545); color: #fff; }
   .listen.on { background: var(--green); color: var(--ink); }
@@ -181,6 +206,7 @@
       <span class="status"><i></i><span id="statusTxt">Aturat</span></span>
       <div class="stat"><b id="timer">0:00</b><span>temps</span></div>
       <div class="stat"><b id="lat">—</b><span>traducció</span></div>
+      <button class="btn btn-theme" id="themeBtn" title="Mode fosc / clar del panell (no canvia la pantalla del públic)">◐</button>
       <button class="btn btn-hide" id="hideBtn" title="Durant la música o el descans: al públic no li surt res">Pantalla visible</button>
       <button class="btn btn-green btn-big" id="go">Començar →</button>
     </div>
@@ -216,9 +242,9 @@
       <label class="f">Subtítols en</label>
       <div class="chips" id="targets" style="margin-top:-6px"></div>
       <p class="hint">L’ordre a la pantalla és l’ordre en què els marques (el número).</p>
-      <label class="f" style="margin-top:14px">Quan es parla un idioma dels subtítols, la seva fila mostra</label>
-      <div class="seg" id="swapLang" style="margin:-6px 0 6px"></div>
-      <p class="hint" style="margin:0">Ex.: subtítols EN + ES i aquí «Català» → quan es parla català surt EN + ES; quan es parla anglès, la fila EN passa a català (CA + ES). «Igual» = la fila repeteix el que es diu.</p>
+      <label class="f" style="margin-top:14px">Segons l’idioma que es parla, a la pantalla surt</label>
+      <div class="smap" id="showMap"></div>
+      <p class="hint" style="margin:0">Marca en ordre (1, 2…). Una fila buida = els «Subtítols en» de dalt.</p>
     </section>
 
     <section class="card">
@@ -294,7 +320,7 @@ const prefs = {
   device: load('device', ''),
   speakers: load('speakers', []),            // [{ name, channel }]
   sourceLang: load('sourceLang', 'auto'),
-  swapLang: load('swapLang', 'none'),
+  showMap: load('showMap', {}),
   mode: load('mode2', 'equilibrat'),
   enhance: load('enhance', false), // per la taula de so ha d'anar APAGADA (l'AGC i el filtre de soroll fan mal)
   targets: load('targets', ['ca', 'es', 'en']),
@@ -313,10 +339,10 @@ let lastStart = null;
 function send(o) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
 function sendConfig() { send({ type: 'config', config: configPayload() }); }
 function configPayload() {
-  return { mode: prefs.mode, sourceLang: prefs.sourceLang, swapLang: prefs.swapLang || 'none', targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
+  return { mode: prefs.mode, sourceLang: prefs.sourceLang, showMap: prefs.showMap || {}, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
     input: isNative() && nativeInfo() ? { native: nativeInfo().uid, name: nativeInfo().name, channels: nativeInfo().channels } : null };
 }
-function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets } }); }
+function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets, showMap: prefs.showMap || {} } }); }
 
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws/captura`);
@@ -475,14 +501,31 @@ $('mode').onclick = (e) => {
 };
 function renderLangs() {
   $('srcLang').innerHTML = [['auto', 'Automàtic'], ...Object.entries(LANGS).slice(0, 3)].map(([k, v]) => `<button data-v="${k}" class="${prefs.sourceLang === k ? 'on' : ''}">${v}</button>`).join('');
+  if ($('showMap')) renderSwap();
   $('quickSrc').innerHTML = '<b class="qs-l">Parla</b>' + [['auto', 'Auto'], ...Object.keys(LANGS).slice(0, 3).map((k) => [k, k.toUpperCase()])].map(([k, v]) => `<button data-v="${k}" class="${prefs.sourceLang === k ? 'on' : ''}">${v}</button>`).join('');
   // L'ordre dels subtítols a la pantalla és l'ordre en què es marquen (el número ho diu)
   $('targets').innerHTML = Object.entries(LANGS).map(([k, v]) => { const n = prefs.targets.indexOf(k); return `<button class="chip ${n >= 0 ? 'on' : ''}" data-v="${k}">${n >= 0 && prefs.targets.length > 1 ? `${n + 1}·` : ''}${v}</button>`; }).join('');
 }
+// ─── Taula: idioma parlat → idiomes a la pantalla (CA = EN+ES · EN = CA+ES) ───
+const MAP_LANGS = ['ca', 'en', 'es'];
 function renderSwap() {
-  $('swapLang').innerHTML = [['none', 'Igual'], ...Object.entries(LANGS).slice(0, 3)].map(([k, v]) => `<button data-v="${k}" class="${(prefs.swapLang || 'none') === k ? 'on' : ''}">${v}</button>`).join('');
+  const m = prefs.showMap || {};
+  $('showMap').innerHTML = MAP_LANGS.map((sp) => {
+    const sel = m[sp] || [];
+    return `<div class="smap-row"><b>${sp.toUpperCase()}</b><span class="smap-eq">=</span>` +
+      MAP_LANGS.map((l) => { const n = sel.indexOf(l); return `<button class="chip ${n >= 0 ? 'on' : ''}" data-sp="${sp}" data-l="${l}">${n >= 0 ? `${n + 1}·` : ''}${l.toUpperCase()}</button>`; }).join('') +
+      `<span class="smap-res">${sel.length ? sel.map((l) => l.toUpperCase()).join(' + ') : '<i>' + prefs.targets.map((l) => l.toUpperCase()).join(' + ') + '</i>'}</span></div>`;
+  }).join('');
 }
-$('swapLang').onclick = (e) => { const v = e.target.dataset.v; if (!v) return; prefs.swapLang = v; save('swapLang', v); renderSwap(); sendConfig(); };
+$('showMap').onclick = (e) => {
+  const { sp, l } = e.target.dataset; if (!sp || !l) return;
+  const m = { ...(prefs.showMap || {}) };
+  const cur = [...(m[sp] || [])];
+  const i = cur.indexOf(l);
+  if (i >= 0) cur.splice(i, 1); else cur.push(l);
+  if (cur.length) m[sp] = cur; else delete m[sp];
+  prefs.showMap = m; save('showMap', m); renderSwap(); sendConfig(); sendDisplay();
+};
 function setSourceLang(v) {
   prefs.sourceLang = v; save('sourceLang', v); renderLangs(); sendConfig();
   if (running) toast(v === 'auto' ? 'Es parla en: automàtic' : `Es parla en ${LANGS[v] || v}: s’aplica a la pausa (o en 3 s)`);
@@ -808,6 +851,11 @@ document.getElementById('pos').addEventListener('click', () => setTimeout(render
 renderArea();
 $('weightSel').value = String(prefs.display.weight || '');
 $('weightSel').onchange = () => { prefs.display.weight = $('weightSel').value ? Number($('weightSel').value) : null; saveDisplay(); };
+// ─── Mode fosc del panell ───
+$('themeBtn').onclick = () => {
+  const on = document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('sub.panelDark', JSON.stringify(on)); } catch {}
+};
 // ─── Escoltar / no escoltar i netejar la pantalla (decisions de l'operador, al costat de la previsualització) ───
 function syncListen(s) {
   const on = s?.listening !== false;

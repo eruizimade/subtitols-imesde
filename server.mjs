@@ -68,7 +68,7 @@ const state = {
   running: false,
   startedAt: null,
   audioMs: 0,
-  config: { mode: 'equilibrat', sourceLang: 'auto', swapLang: 'none', targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
+  config: { mode: 'equilibrat', sourceLang: 'auto', showMap: {}, targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
   display: null, // configuració de la pantalla que tria l'operador
   errors: [],
   latency: { translate: null },
@@ -316,10 +316,8 @@ function translateBlock(block) {
   // Idioma del que s'ha dit: el fixat a «Es parla en» quan va començar la frase o, si no, el del ponent.
   // A l'idioma que ja és el de l'original no es tradueix: surt tal qual.
   const srcL = block.srcLang && block.srcLang !== 'auto' ? block.srcLang : block.lang || null;
-  // L'idioma de RECANVI (configurable): quan es parla un dels idiomes dels subtítols, la seva fila mostra
-  // aquest altre (p. ex. es parla anglès → la fila EN passa a dir-ho en català). Cal tenir-lo traduït sempre.
-  const swap = state.config.swapLang && state.config.swapLang !== 'none' ? state.config.swapLang : null;
-  const langs = swap && !state.config.targets.includes(swap) ? [...state.config.targets, swap] : state.config.targets;
+  // Tots els idiomes que poden sortir a la pantalla: els «Subtítols en» i els de la taula per idioma parlat
+  const langs = [...new Set([...state.config.targets, ...Object.values(state.config.showMap || {}).flat()])];
   for (const lang of langs) {
     if (srcL === lang || !/\p{L}/u.test(text)) { block.tr[lang] = text; continue; }
     const running = block.jobs[lang];
@@ -595,7 +593,10 @@ function stop() {
 function sanitizeConfig(c = {}) {
   const out = {};
   if (typeof c.sourceLang === 'string') out.sourceLang = c.sourceLang;
-  if (typeof c.swapLang === 'string') out.swapLang = c.swapLang === 'none' || LANG_NAMES[c.swapLang] ? c.swapLang : 'none';
+  if (c.showMap && typeof c.showMap === 'object') {
+    out.showMap = {};
+    for (const [sp, arr] of Object.entries(c.showMap)) if (LANG_NAMES[sp] && Array.isArray(arr)) out.showMap[sp] = [...new Set(arr.filter((l) => LANG_NAMES[l]))].slice(0, 4);
+  }
   if (typeof c.mode === 'string' && MODES[c.mode]) out.mode = c.mode;
   if (Array.isArray(c.targets)) out.targets = c.targets.filter((t) => typeof t === 'string').slice(0, 6);
   if (typeof c.prompt === 'string') out.prompt = c.prompt.slice(0, 1500);

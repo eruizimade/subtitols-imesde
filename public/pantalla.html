@@ -108,7 +108,14 @@
     for (const k of ['size', 'lines', 'clear', 'dwell']) if (!(Number(next[k]) > 0)) next[k] = DEFAULTS[k];
     if (typeof next.font !== 'string' || !/^(sans|serif|system|custom:[\p{L}\p{N} ._()-]{1,80}\.(ttf|otf|woff2?))$/iu.test(next.font)) next.font = 'sans';
     next.lines = Math.min(4, Math.max(1, Math.round(next.lines)));
-    const rebuild = JSON.stringify([next.langs, next.src]) !== JSON.stringify([cfg.langs, cfg.src]) || !document.getElementById('rows').children.length;
+    // Què surt segons l'idioma que es parla: { ca: ['en','es'], en: ['ca','es'] } (buit = els «Subtítols en»)
+    const map = {};
+    if (next.showMap && typeof next.showMap === 'object') for (const [sp, arr] of Object.entries(next.showMap)) {
+      if (/^[a-z]{2,3}$/.test(sp) && Array.isArray(arr)) { const a = arr.filter((l) => /^[a-z]{2,3}$/.test(l)).slice(0, 4); if (a.length) map[sp] = a; }
+    }
+    next.showMap = map;
+    next.slots = Math.max(next.langs.length, ...Object.values(map).map((a) => a.length));
+    const rebuild = JSON.stringify([next.langs, next.src, next.slots]) !== JSON.stringify([cfg.langs, cfg.src, cfg.slots]) || !document.getElementById('rows').children.length;
     cfg = next;
     const root = document.documentElement;
     // La mida va per l'amplada però mai més alta del que hi cap (pantalles panoràmiques / LED)
@@ -136,18 +143,11 @@
       const rows = document.getElementById('rows');
       rows.innerHTML = '';
       for (const k of Object.keys(lanes)) delete lanes[k];
-      for (const k of (cfg.src ? ['src'] : []).concat(cfg.langs)) {
-        rows.insertAdjacentHTML('beforeend', `<div class="row ${k === 'src' ? 'src' : ''}"><span class="tag">${k === 'src' ? 'ORIG' : k.toUpperCase()}</span><div class="box"><div class="text" data-k="${k}"></div></div></div>`);
-        lanes[k] = { el: document.querySelector(`.text[data-k="${k}"]`), spans: new Map(), top: 0, lastMove: 0 };
+      const slotKeys = Array.from({ length: cfg.slots }, (_, i) => cfg.langs[i] || `x${i}`);
+      for (const k of (cfg.src ? ['src'] : []).concat(slotKeys)) {
+        rows.insertAdjacentHTML('beforeend', `<div class="row ${k === 'src' ? 'src' : ''}"><span class="tag">${k === 'src' ? 'ORIG' : k.startsWith('x') ? '' : k.toUpperCase()}</span><div class="box"><div class="text" data-k="${k}"></div></div></div>`);
+        lanes[k] = { el: document.querySelector(`.text[data-k="${k}"]`), spans: new Map(), top: 0, lastMove: 0, i: slotKeys.indexOf(k) };
       }
-    }
-    // Colors per idioma
-    const colors = cfg.colorize && cfg.langColors && typeof cfg.langColors === 'object' ? cfg.langColors : {};
-    for (const row of document.querySelectorAll('#rows .row')) {
-      const k = row.querySelector('.text')?.dataset.k;
-      const c = colors[k];
-      if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) { row.dataset.lc = ''; row.style.setProperty('--lc', c); }
-      else { delete row.dataset.lc; row.style.removeProperty('--lc'); }
     }
     // la mida o el nombre de línies canvien on cau cada línia: es torna a situar a la posició ACTUAL
     // (abans tornava a la primera línia i el públic veia repetir frases de fa 20 s)
@@ -171,13 +171,21 @@
 
   const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
+  // Quin idioma va a la fila i per a aquesta frase: el que diu la taula per a l'idioma que s'hi parla
+  function slotLang(b, i) {
+    const m = cfg.showMap?.[b?.spoken];
+    return (m && m.length ? m : cfg.langs)[i] || null;
+  }
+
   // ─── Una fila ─────────────────────────────────────────────────────────────
   function renderLane(k, blocks, now) {
     const lane = lanes[k];
     if (!lane) return;
-    // Es parla l'idioma d'aquesta fila: hi surt l'idioma de recanvi (si n'hi ha), no l'original repetit
-    const swap = last?.config?.swapLang && last.config.swapLang !== 'none' ? last.config.swapLang : null;
-    const get = (b) => (k === 'src' ? b.src : (swap && b.spoken === k && b.tr?.[swap]) || b.tr?.[k]) || '';
+    const get = (b) => {
+      if (k === 'src') return b.src || '';
+      const L = slotLang(b, lane.i);
+      return (L && (b.tr?.[L] || (L === b.spoken ? b.src : ''))) || '';
+    };
 
     // 1. Paraules que hi ha d'haver, amb una clau estable (frase:posició)
     const want = [];
@@ -293,13 +301,16 @@
     for (const k of Object.keys(lanes)) renderLane(k, blocks, localNow);
 
     const cur = blocks[blocks.length - 1];
-    // L'etiqueta de cada fila diu l'idioma que s'hi llegeix ara
-    const swapL = last?.config?.swapLang && last.config.swapLang !== 'none' ? last.config.swapLang : null;
+    // L'etiqueta i el color de cada fila són els de l'idioma que s'hi llegeix ara
+    const colors = cfg.colorize && cfg.langColors && typeof cfg.langColors === 'object' ? cfg.langColors : {};
     for (const [k, l] of Object.entries(lanes)) {
-      if (k === 'src') continue;
-      const tag = l.el.closest('.row')?.querySelector('.tag');
-      const want = (swapL && cur?.spoken === k && cur?.tr?.[swapL] ? swapL : k).toUpperCase();
-      if (tag && tag.textContent !== want) tag.textContent = want;
+      const row = l.el.closest('.row');
+      const L = k === 'src' ? (cur?.spoken || 'src') : slotLang(cur, l.i) || '';
+      if (k !== 'src') { const tag = row?.querySelector('.tag'); const want = L.toUpperCase(); if (tag && tag.textContent !== want) tag.textContent = want; }
+      const c = colors[k === 'src' ? 'src' : L];
+      const has = typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+      if (has && row.style.getPropertyValue('--lc') !== c) { row.dataset.lc = ''; row.style.setProperty('--lc', c); }
+      else if (!has && 'lc' in row.dataset) { delete row.dataset.lc; row.style.removeProperty('--lc'); }
     }
     const sp = document.getElementById('speaker');
     const show = cfg.speaker && cur?.speaker;
