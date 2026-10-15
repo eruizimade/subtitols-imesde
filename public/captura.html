@@ -94,6 +94,14 @@
   .btn-hide { padding: 13px 20px; font-size: 14.5px; font-weight: 600; background: transparent; color: var(--cream); border: 1px solid rgba(244,243,239,.35); min-width: 170px; }
   .btn-hide:hover { border-color: var(--cream); }
   .btn-hide.on { background: #ffb547; color: var(--ink); border-color: #ffb547; font-weight: 700; }
+  /* Lectura literal (guió llegit paraula per paraula): encesa, en verd de marca */
+  .btn-lit { padding: 13px 18px; font-size: 14.5px; font-weight: 600; background: transparent; color: var(--cream); border: 1px solid rgba(244,243,239,.35); }
+  .btn-lit:hover { border-color: var(--cream); }
+  .btn-lit.on { background: var(--green); color: var(--ink); border-color: var(--green); font-weight: 700; }
+  #litBar { position: sticky; top: 0; z-index: 39; display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--green); color: var(--ink); font-size: 15px; }
+  #litBar b { white-space: nowrap; }
+  #litBar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #litBar .btn { padding: 7px 14px; font-size: 14px; background: var(--ink); color: var(--cream); }
 
   /* ─── Graella ─── */
   main { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 22px; padding: 26px clamp(16px, 3vw, 40px) 40px; max-width: 1600px; margin: 0 auto; }
@@ -197,6 +205,7 @@
 </head>
 <body>
 <div id="alarm"></div>
+<div id="litBar" hidden><b>LECTURA LITERAL</b><span id="litTxt"></span><button class="btn" id="litPrev" title="Torna a ensenyar la frase anterior">◀</button><button class="btn" id="litNext" title="Passa a la frase següent">▶</button></div>
 <header id="hdr">
   <div class="bar">
     <a class="brand" href="https://www.imesde.cat" target="_blank" rel="noopener"><img src="/brand/logo-green.png" alt="Imesde"></a>
@@ -207,6 +216,7 @@
       <div class="stat"><b id="timer">0:00</b><span>temps</span></div>
       <div class="stat"><b id="lat">—</b><span>traducció</span></div>
       <button class="btn btn-theme" id="themeBtn" title="Mode fosc / clar del panell (no canvia la pantalla del públic)">◐</button>
+      <button class="btn btn-lit" id="litBtn" title="Quan es llegeix el guió paraula per paraula (la carta): a la pantalla surt la traducció OFICIAL de cada frase, seguint la veu. Apaga-ho quan s’acabi la lectura">Lectura literal</button>
       <button class="btn btn-hide" id="hideBtn" title="Durant la música o el descans: al públic no li surt res">Pantalla visible</button>
       <button class="btn btn-green btn-big" id="go">Començar →</button>
     </div>
@@ -389,6 +399,7 @@ function onState(s) {
   if (s.running) { stoppedBySelf = false; stoppedAlarm = 0; }
   lastState = s;
   syncListen(s);
+  syncLiteral(s);
   if (s.native?.active) {
     if (s.native.lastAt) lastFrameAt = performance.now() - Math.max(0, s.now - s.native.lastAt);
     const lv = s.native.levels || [];
@@ -874,6 +885,22 @@ $('listenBtn').onclick = () => {
 $('clearScreen').onclick = () => { send({ type: 'clearScreen' }); toast('Pantalla neta'); };
 function syncHideBtn() { const on = $('hideScreen').checked; $('hideBtn').classList.toggle('on', on); $('hideBtn').textContent = on ? 'Pantalla AMAGADA' : 'Pantalla visible'; }
 $('hideScreen').onchange = () => { prefs.display.hidden = $('hideScreen').checked; sendDisplay(); syncHideBtn(); toast(prefs.display.hidden ? 'Pantalla AMAGADA' : 'Pantalla visible'); };
+// ─── Lectura literal ───
+function syncLiteral(s) {
+  const L = s.literal || {};
+  $('litBtn').classList.toggle('on', !!L.on);
+  $('litBtn').textContent = L.on ? 'Lectura literal ●' : 'Lectura literal';
+  $('litBtn').disabled = !s.guio;
+  $('litBar').hidden = !L.on;
+  if (L.on) $('litTxt').textContent = L.i >= 0 ? `Frase ${L.i + 1} de ${L.n} · ${L.text}` : 'Esperant que comenci a llegir el guió…';
+}
+$('litBtn').onclick = () => {
+  const on = !(lastState?.literal?.on);
+  send({ type: 'literal', on });
+  toast(on ? 'Lectura literal: surt la traducció oficial del guió, seguint la veu' : 'Lectura literal apagada: torna la traducció en directe');
+};
+$('litPrev').onclick = () => send({ type: 'literal', op: 'prev' });
+$('litNext').onclick = () => send({ type: 'literal', op: 'next' });
 $('hideBtn').onclick = () => { $('hideScreen').checked = !$('hideScreen').checked; $('hideScreen').onchange(); };
 $('center').checked = prefs.display.align === 'center';
 $('center').onchange = () => { prefs.display.align = $('center').checked ? 'center' : 'left'; saveDisplay(); };

@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createNative, listDevices } from './nadiu.mjs';
+import { createPrompter } from './prompter.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 // DATA_DIR: on viuen .env, guio.json i sessions/. Per defecte, aquesta carpeta (com sempre); l'app
@@ -123,7 +124,8 @@ function broadcast() {
       // Només els errors dels últims 3 minuts: un error passatger de fa dues hores no ha de quedar
       // a la vista tota la nit (s'acaba aprenent a no mirar-ho)
       errors: state.errors.filter((e) => Date.now() - e.t < 180000).slice(-4).map((e) => e.text),
-      blocks: blocks.slice(-10).map((b) => ({ id: b.id, speaker: b.speaker, src: b.src, tr: b.tr, final: b.final, t0: b.t0, tEnd: b.tEnd, spoken: spokenLang(b) })),
+      literal: { on: literal.on, i: literal.last, n: guio?.segments.length || 0, text: guio?.segments[literal.last]?.src || '' },
+      blocks: blocks.filter((b) => !b.hidden).slice(-10).map((b) => ({ id: b.id, speaker: b.speaker, src: b.src, tr: b.tr, final: b.final, t0: b.t0, tEnd: b.tEnd, spoken: spokenLang(b) })),
       now: Date.now(),
       upstream: upstream?.readyState === WebSocket.OPEN ? 'open' : upstream?.readyState === WebSocket.CONNECTING ? 'connecting' : upstream ? 'down' : 'none',
       lastText: lastSpeech,
@@ -164,6 +166,38 @@ const smooth = (prev, v) => (prev == null ? v : Math.round(prev * 0.7 + v * 0.3)
 // traducció al model. No hi ha cap risc si no s'hi assembla res: la traducció va com sempre.
 const GUIO_FILE = process.env.GUIO ? path.resolve(process.env.GUIO) : path.join(DATA_DIR, 'guio.json');
 let guio = null;   // { segments: [{ src, tr, words:Set }] }
+// ─── LECTURA LITERAL ─────────────────────────────────────────────────────────
+// Quan algú llegeix el guió paraula per paraula (una carta), no cal que la IA el torni a traduir: se segueix
+// la veu dins del guió (prompter.mjs) i, quan comença cada frase, surt SENCERA la traducció oficial, abans i
+// tot que l'acabi de dir. L'activa i l'apaga l'operador; mentre és activa, el que es transcriu no surt a la
+// pantalla (queda al registre). ◀ ▶ al panell per si es perd.
+const prompter = createPrompter();
+const literal = { on: false, last: -1 };
+function emitLiteralSeg(i) {
+  const seg = guio?.segments[i];
+  if (!seg) return;
+  const src = guio.source || 'ca';
+  const now = Date.now();
+  const b = { id: nextId++, speakerIdx: null, speaker: open?.speaker ?? null, lang: src, srcLang: src, src: seg.src, tr: { ...seg.tr, [src]: seg.src }, final: true, t0: now, tEnd: now, literal: true };
+  blocks.push(b);
+  if (blocks.length > 60) blocks = blocks.slice(-40);
+  literal.last = i;
+  log({ kind: 'literal', i: i + 1, src: seg.src });
+}
+function stepLiteral() {
+  if (!literal.on || !guio) return;
+  const { i } = prompter.position();
+  if (i > literal.last) {
+    // Si s'avança poc, surten totes les frases d'entremig (no se'n perd cap); si és un salt gran, només la bona
+    const from = i - literal.last <= 3 ? literal.last + 1 : i;
+    for (let k = from; k <= i; k++) emitLiteralSeg(k);
+    broadcast();
+  } else if (i === literal.last) {
+    // Mentre es llegeix la mateixa frase, que no s'esvaeixi de la pantalla encara que sigui llarga
+    const b = blocks.findLast?.((x) => x.literal);
+    if (b) b.tEnd = Date.now();
+  }
+}
 let guioPos = -1;  // on érem del guió (per preferir el que ve a continuació)
 const contentWords = (t) => new Set(t.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3));
 function loadGuio() {
@@ -172,6 +206,7 @@ function loadGuio() {
     const g = JSON.parse(fs.readFileSync(GUIO_FILE, 'utf8'));
     guio = { ...g, segments: (g.segments || []).map((x) => ({ ...x, words: contentWords(x.src) })) };
     guioPos = -1;
+    prompter.load(guio.segments); literal.last = -1;
     console.log(`  ✓ Guió carregat: ${guio.segments.length} frases (${g.from || 'guio.json'})`);
   } catch (e) { guio = null; pushError('guió', `no s'ha pogut llegir guio.json (${e.message})`); }
 }
@@ -308,6 +343,7 @@ function acceptTranslation(cur, out, { done, final }) {
 }
 
 function translateBlock(block) {
+  if (block.hidden) { broadcast(); return Promise.resolve(); } // lectura literal: surt la traducció oficial, no aquesta
   block.jobs ??= {};
   block.seq ??= {};
   const text = block.src.trim();
@@ -376,12 +412,13 @@ function finalize(block) {
   block.final = true;
   block.tEnd = Date.now();
   if (open === block) open = null;
+  if (literal.on) { prompter.flush(); stepLiteral(); }
   if (!block.src) { blocks = blocks.filter((b) => b !== block); broadcast(); return; }
   translateBlock(block).then(() => log({ kind: 'frase', speaker: block.speaker, src: block.src, ...block.tr }));
 }
 
 function newBlock(speakerIdx) {
-  const b = { id: nextId++, speakerIdx, speaker: speakerName(speakerIdx), lang: speakerLang(speakerIdx), srcLang: state.config.sourceLang, src: '', tr: {}, final: false, t0: Date.now(), tEnd: Date.now() };
+  const b = { id: nextId++, speakerIdx, speaker: speakerName(speakerIdx), lang: speakerLang(speakerIdx), srcLang: state.config.sourceLang, src: '', tr: {}, final: false, t0: Date.now(), tEnd: Date.now(), hidden: literal.on };
   blocks.push(b);
   if (blocks.length > 60) blocks = blocks.slice(-40);
   open = b;
@@ -409,6 +446,7 @@ function onTranscriptDelta(delta) {
       if (!delta.trim()) { broadcast(); return; }
     }
   }
+  if (literal.on) { prompter.feed(delta); stepLiteral(); }
   let b = open || newBlock(sp);
   b.src += delta;
   b.tEnd = now;
@@ -864,6 +902,19 @@ wss.on('connection', (ws, req) => {
       broadcast();
     }
     else if (msg.type === 'display') { state.display = msg.display; broadcast(); }
+    else if (msg.type === 'literal') {
+      if (typeof msg.on === 'boolean' && msg.on !== literal.on) {
+        literal.on = msg.on;
+        if (literal.on) { literal.last = prompter.position().i; if (open) open.hidden = true; } // el que ja és a la pantalla no es repeteix
+        log({ kind: 'literal', on: literal.on });
+      }
+      if (msg.op === 'next' || msg.op === 'prev') {
+        const n = guio?.segments.length || 0;
+        const i = Math.max(0, Math.min(n - 1, literal.last + (msg.op === 'next' ? 1 : -1)));
+        if (n) { prompter.goTo(i); emitLiteralSeg(i); }
+      }
+      broadcast();
+    }
   });
   ws.on('close', () => { operators.delete(ws); displays.delete(ws); if (ws === audioOwner) audioOwner = null; });
 });

@@ -113,6 +113,14 @@ Amb el text que llegiran, la traducció d'aquelles parts surt molt millor (noms,
 Si el ponent se n'aparta, es tradueix el que diu de debò; si una frase no s'assembla a res del guió,
 funciona com sempre.
 
+## Lectura literal (una carta llegida paraula per paraula)
+
+Botó **«Lectura literal»** de la capçalera del panell. Encès: l'app segueix la veu dins del guió i, quan
+comença cada frase, a la pantalla surt **sencera la traducció oficial** del guió (abans i tot que s'acabi de
+dir); el que es transcriu no surt. La barra verda de dalt diu a quina frase som; **◀ ▶** per corregir-la si
+es perd. Encén-lo quan comenci la lectura i **apaga'l quan s'acabi** (si no, el que es digui després no
+sortirà). Cal el guió carregat.
+
 ## Posar-la en marxa
 
 1. Crea un fitxer `.env` en aquesta carpeta:
