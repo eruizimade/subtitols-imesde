@@ -27,9 +27,14 @@ function readPcm(file) {
   if (rate !== 24000 || ch !== 1) throw new Error(`${file}: cal mono 24 kHz (és ${ch} canals, ${rate} Hz)`);
   return b.subarray(i + 8);
 }
-const pcm = Buffer.concat(FILES.map(readPcm));
+// --ponents=Nom:llengua:fitxer.wav,Nom2:llengua:fitxer2.wav → parlen per torns, cadascú pel seu canal (byte de ponent)
+const PONENTS = opt.ponents ? opt.ponents.split(',').map((x) => { const [name, lang, file] = x.split(':'); return { name, lang, pcm: readPcm(file) }; }) : null;
+const pcm = PONENTS ? Buffer.alloc(0) : Buffer.concat(FILES.map(readPcm));
+// línia de temps per torns: [ponent 0][1,5 s de silenci][ponent 1][1,5 s]...
+const SEGS = PONENTS ? PONENTS.flatMap((p, i) => [{ sp: i, pcm: p.pcm }, { sp: i, pcm: Buffer.alloc(72000) }]) : null;
+let segI = 0, segPos = 0;
 const FRAME = 4800; // 100 ms
-console.log(`àudio: ${(pcm.length / 48000).toFixed(0)} s en bucle · prova de ${MINUTS} min`);
+console.log(PONENTS ? `ponents: ${PONENTS.map((p) => p.name + '/' + p.lang).join(', ')}` : `àudio: ${(pcm.length / 48000).toFixed(0)} s en bucle · prova de ${MINUTS} min`);
 
 const t0 = Date.now();
 const stats = { frasesNoves: 0, maxBuit: 0, errors: new Set(), running: null, ultimaFrase: Date.now(), maxId: 0, aturades: 0 };
@@ -39,7 +44,7 @@ let cap;
 function obrePanell(first) {
   cap = new WebSocket(`ws://${HOST}/ws/captura`);
   cap.on('open', () => {
-    if (first) cap.send(JSON.stringify({ type: 'start', config: { mode: 'equilibrat', targets: String(opt.targets || 'ca,es,en').split(','), sourceLang: opt.lang || 'auto', prompt: opt.prompt || '', speakers: [] } }));
+    if (first) cap.send(JSON.stringify({ type: 'start', config: { mode: 'equilibrat', targets: String(opt.targets || 'ca,es,en').split(','), sourceLang: opt.lang || 'auto', prompt: opt.prompt || '', speakers: PONENTS ? PONENTS.map((p) => p.name) : [], speakerLangs: PONENTS ? PONENTS.map((p) => p.lang) : [] } }));
   });
   cap.on('close', () => { if (!fi) setTimeout(() => obrePanell(false), 1000); });
   cap.on('error', () => {});
@@ -51,14 +56,19 @@ setInterval(() => {
   if (cap.readyState !== 1) return;
   const el = Date.now() - t0;
   const silenci = SIL_EVERY && el % SIL_EVERY > SIL_EVERY - SIL_LEN;
-  let chunk;
-  if (silenci) chunk = Buffer.alloc(FRAME);
+  let chunk, spByte = 255;
+  if (SEGS) {
+    const seg = SEGS[segI];
+    chunk = Buffer.alloc(FRAME); seg.pcm.copy(chunk, 0, segPos, Math.min(segPos + FRAME, seg.pcm.length));
+    spByte = seg.sp; segPos += FRAME;
+    if (segPos >= seg.pcm.length) { segPos = 0; segI = (segI + 1) % SEGS.length; }
+  } else if (silenci) chunk = Buffer.alloc(FRAME);
   else {
     if (pos0 + FRAME > pcm.length) pos0 = 0;
     chunk = pcm.subarray(pos0, pos0 + FRAME);
     pos0 += FRAME;
   }
-  cap.send(Buffer.concat([Buffer.from([255]), chunk]));
+  cap.send(Buffer.concat([Buffer.from([spByte]), chunk]));
 }, 100);
 
 if (CUT_EVERY) setInterval(() => { console.log('✂ tallo el panell'); cap.terminate(); }, CUT_EVERY);
@@ -75,7 +85,8 @@ pant.on('message', (raw) => {
     stats.frasesNoves++;
     stats.maxBuit = Math.max(stats.maxBuit, Date.now() - stats.ultimaFrase);
     stats.ultimaFrase = Date.now();
-    stats.ultimText = `${b.src} → ${b.tr?.en || ''}`.slice(0, 120);
+    stats.ultimText = `${b.speaker ? '[' + b.speaker + '] ' : ''}${b.src} → EN: ${b.tr?.en || ''} | ES: ${b.tr?.es || ''}`.slice(0, 220);
+    if (opt.ponents) console.log('    ·', stats.ultimText);
     stats.cost = s.costUSD;
   }
 });

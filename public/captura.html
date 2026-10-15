@@ -94,13 +94,13 @@
 
   /* Ponents */
   .speakers { display: flex; flex-direction: column; gap: 10px; }
-  .sp { display: grid; grid-template-columns: 26px 1fr 110px 30px; gap: 8px; align-items: center; padding: 8px 8px 10px; border-radius: 12px; background: var(--cream); position: relative; transition: box-shadow .2s, background .2s; }
+  .sp { display: grid; grid-template-columns: 26px 1fr 96px 112px 30px; gap: 8px; align-items: center; padding: 8px 8px 10px; border-radius: 12px; background: var(--cream); position: relative; transition: box-shadow .2s, background .2s; }
   .sp.active { background: #f6fbe1; box-shadow: inset 0 0 0 2px var(--green); }
   .sp .dot { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--c); justify-self: center; background: radial-gradient(circle, var(--c) 0 28%, transparent 30%); }
   .sp input, .sp select { background: #fff; padding: 7px 10px; font-size: 14px; }
   .sp .x { border: 0; background: transparent; cursor: pointer; font-size: 18px; color: var(--ink-soft); border-radius: 50%; height: 30px; }
   .sp .x:hover { background: #fff; color: var(--ink); }
-  .sp .meter { grid-column: 2 / 4; height: 5px; }
+  .sp .meter { grid-column: 2 / 5; height: 5px; }
   .sp .meter i { background: var(--c); }
   .empty { font-size: 13.5px; color: var(--ink-soft); padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 12px; }
 
@@ -214,7 +214,7 @@
       <h2 class="kicker"><span class="n">04</span> Ponents <span class="right" id="spCount"></span></h2>
       <div class="speakers" id="speakers"></div>
       <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" id="addSp">+ Afegir ponent</button></div>
-      <p class="hint">Cada ponent al seu micro (canal de la targeta). El sistema escolta qui parla més fort i n'escriu el nom. Sense ponents, es barreja tot.</p>
+      <p class="hint">Cada ponent al seu micro (canal de la targeta). El sistema escolta qui parla més fort i n'escriu el nom. Sense ponents, es barreja tot. L’idioma ajuda la transcripció i la traducció (si algú canvia de llengua, es tradueix igual).</p>
     </section>
   </div>
 
@@ -281,7 +281,7 @@ let lastStart = null;
 function send(o) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
 function sendConfig() { send({ type: 'config', config: configPayload() }); }
 function configPayload() {
-  return { mode: prefs.mode, sourceLang: prefs.sourceLang, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name) };
+  return { mode: prefs.mode, sourceLang: prefs.sourceLang, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto') };
 }
 function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets } }); }
 
@@ -461,7 +461,9 @@ function renderSpeakers() {
     const opts = Array.from({ length: Math.max(channelCount, s.channel + 1, 2) }, (_, c) => `<option value="${c}" ${c === s.channel ? 'selected' : ''}>Canal ${c + 1}</option>`).join('');
     return `<div class="sp" data-i="${i}" style="--c:${COLORS[i % COLORS.length]}"><span class="dot"></span>` +
       `<input type="text" value="${esc(s.name)}" placeholder="Nom del ponent" data-f="name">` +
-      `<select data-f="channel">${opts}</select><button class="x" title="Treure">×</button>` +
+      `<select data-f="channel">${opts}</select>` +
+      `<select data-f="lang" title="En quina llengua parla aquest ponent">${[['auto', 'Idioma: auto'], ...Object.entries(LANGS)].map(([k, v]) => `<option value="${k}" ${(s.lang || 'auto') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>` +
+      `<button class="x" title="Treure">×</button>` +
       `<span></span><div class="meter"><i></i></div></div>`;
   }).join('');
   $('spCount').textContent = prefs.speakers.length ? `${prefs.speakers.length} ${prefs.speakers.length === 1 ? 'ponent' : 'ponents'}` : '';
@@ -470,7 +472,7 @@ function renderSpeakers() {
 $('addSp').onclick = () => {
   const used = new Set(prefs.speakers.map((s) => s.channel));
   let ch = 0; while (used.has(ch)) ch++;
-  prefs.speakers.push({ name: '', channel: ch });
+  prefs.speakers.push({ name: '', channel: ch, lang: 'auto' });
   save('speakers', prefs.speakers); renderSpeakers(); sendConfig();
   $('speakers').querySelector('.sp:last-child input')?.focus();
 };
@@ -478,6 +480,7 @@ $('speakers').addEventListener('input', (e) => {
   const row = e.target.closest('.sp'); if (!row) return;
   const s = prefs.speakers[row.dataset.i];
   if (e.target.dataset.f === 'name') s.name = e.target.value;
+  if (e.target.dataset.f === 'lang') s.lang = e.target.value;
   if (e.target.dataset.f === 'channel') { s.channel = Number(e.target.value); node?.port.postMessage({ channels: prefs.speakers.map((x) => x.channel) }); }
   save('speakers', prefs.speakers); sendConfig();
 });

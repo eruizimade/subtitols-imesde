@@ -65,7 +65,7 @@ const state = {
   running: false,
   startedAt: null,
   audioMs: 0,
-  config: { mode: 'equilibrat', sourceLang: 'auto', targets: ['ca', 'es', 'en'], prompt: '', speakers: [] },
+  config: { mode: 'equilibrat', sourceLang: 'auto', targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
   display: null, // configuració de la pantalla que tria l'operador
   errors: [],
   latency: { translate: null },
@@ -202,9 +202,9 @@ function guioMatch(text) {
 
 // ─── Traducció en streaming ─────────────────────────────────────────────────
 // La xarxa falla de tant en tant («fetch failed»): es reintenta dues vegades abans de rendir-se
-async function streamTranslate(text, lang, onText, signal, final = false) {
+async function streamTranslate(text, lang, onText, signal, final = false, srcLang = null) {
   for (let intent = 0; ; intent++) {
-    try { return await streamTranslateOnce(text, lang, onText, signal, final); }
+    try { return await streamTranslateOnce(text, lang, onText, signal, final, srcLang); }
     catch (e) {
       // Un 4xx és definitiu (clau, model, petició mal feta) TRET del 429 (límit de ritme) i el 408:
       // amb un acte de molta parla, un 429 deixava la frase traduïda a mitges per sempre
@@ -219,7 +219,7 @@ async function streamTranslate(text, lang, onText, signal, final = false) {
   }
 }
 
-async function streamTranslateOnce(text, lang, onText, signal, final = false) {
+async function streamTranslateOnce(text, lang, onText, signal, final = false, srcLang = null) {
   const context = blocks.filter((b) => b.final && b.src && b.src.trim() !== text.trim()).slice(-3).map((b) => b.src).join(' ');
   const m = guioMatch(text);
   if (m && final) guioPos = m.i;
@@ -244,6 +244,7 @@ async function streamTranslateOnce(text, lang, onText, signal, final = false) {
             `Si ja és en ${LANG_NAMES[lang] || lang}, torna'l igual, només net de tics i repeticions. ` +
             'Els noms propis catalans (Orfeó Català, Palau de la Música Catalana, noms de persones) no es tradueixen. ' +
             'El text pot estar a mitja frase: no el completis ni hi afegeixis res. Respon NOMÉS amb la traducció, sense cometes.' +
+            (srcLang ? `\nQui parla s'expressa habitualment en ${LANG_NAMES[srcLang]} (si aquest tros és en una altra llengua, tradueix-lo igualment).` : '') +
             (state.config.prompt ? `\nInformació de l'acte: ${state.config.prompt}` : '') +
             (context ? `\nEl que s'acaba de dir (context, no ho tradueixis): ${context}` : '') +
             (ref ? `\nAquest fragment és, probablement, part del GUIÓ escrit de l'acte. Aquí tens el tros del guió i la seva traducció aprovada:\n${ref}\n` +
@@ -321,7 +322,7 @@ function translateBlock(block) {
         if (seq !== block.seq[lang]) return;
         if (first && out) { first = false; state.latency.translate = smooth(state.latency.translate, Date.now() - t); }
         if (acceptTranslation(block.tr[lang] || '', out, { done, final })) { block.tr[lang] = out.trim(); broadcast(); }
-      }, ctrl.signal, final)
+      }, ctrl.signal, final, block.lang)
         .catch((e) => { if (e.name !== 'AbortError') pushError(`traducció ${lang}`, e); })
         .finally(() => { if (block.jobs[lang] === ctrl) block.jobs[lang] = null; }),
     );
@@ -336,6 +337,8 @@ function speakerAt(t) {
   return speakerTimeline[0]?.s ?? null;
 }
 const speakerName = (i) => (i == null || i === 255 ? null : state.config.speakers[i] || null);
+// Idioma del ponent (si se n'ha triat un): indicació per a la traducció, no un interruptor
+const speakerLang = (i) => { const l = i == null || i === 255 ? null : state.config.speakerLangs?.[i]; return l && l !== 'auto' && LANG_NAMES[l] ? l : null; };
 
 function finalize(block) {
   if (!block || block.final) return;
@@ -350,7 +353,7 @@ function finalize(block) {
 }
 
 function newBlock(speakerIdx) {
-  const b = { id: nextId++, speakerIdx, speaker: speakerName(speakerIdx), src: '', tr: {}, final: false, t0: Date.now(), tEnd: Date.now() };
+  const b = { id: nextId++, speakerIdx, speaker: speakerName(speakerIdx), lang: speakerLang(speakerIdx), src: '', tr: {}, final: false, t0: Date.now(), tEnd: Date.now() };
   blocks.push(b);
   if (blocks.length > 60) blocks = blocks.slice(-40);
   open = b;
@@ -425,9 +428,13 @@ function openStt() {
     const transcription = { model: process.env.TRANSCRIBE_MODEL || mode.model };
     const live = transcription.model === 'gpt-live-transcribe';
     if (live) transcription.delay = process.env.TRANSCRIBE_DELAY || mode.delay;
-    if (state.config.sourceLang !== 'auto') {
-      if (live) transcription.languages = [state.config.sourceLang];
-      else transcription.language = state.config.sourceLang;
+    // Llengües que es parlaran: la fixada a «Es parla en» o, si tots els ponents en tenen una, la llista
+    const spk = (state.config.speakers || []).map((_, i) => speakerLang(i));
+    const langs = state.config.sourceLang !== 'auto' ? [state.config.sourceLang]
+      : spk.length && spk.every(Boolean) ? [...new Set(spk)] : null;
+    if (langs) {
+      if (live) transcription.languages = langs;
+      else if (langs.length === 1) transcription.language = langs[0];
     }
     const names = guioNames();
     const sttPrompt = [state.config.prompt, names && `Noms: ${names}`].filter(Boolean).join('\n');
@@ -542,6 +549,7 @@ function sanitizeConfig(c = {}) {
   if (Array.isArray(c.targets)) out.targets = c.targets.filter((t) => typeof t === 'string').slice(0, 6);
   if (typeof c.prompt === 'string') out.prompt = c.prompt.slice(0, 1500);
   if (Array.isArray(c.speakers)) out.speakers = c.speakers.map((s) => String(s || '').slice(0, 60));
+  if (Array.isArray(c.speakerLangs)) out.speakerLangs = c.speakerLangs.map((l) => (typeof l === 'string' && (l === 'auto' || LANG_NAMES[l]) ? l : 'auto')).slice(0, 16);
   return out;
 }
 
@@ -780,10 +788,10 @@ wss.on('connection', (ws, req) => {
     else if (msg.type === 'stop') stop();
     else if (msg.type === 'clear') { blocks = []; open = null; broadcast(); }
     else if (msg.type === 'config') {
-      const before = JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt]);
+      const before = JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs]);
       Object.assign(state.config, sanitizeConfig(msg.config));
       // El context, l'idioma i el mode s'envien a OpenAI en obrir la sessió: si canvien en directe, es renova
-      if (state.running && before !== JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt])) {
+      if (state.running && before !== JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs])) {
         pendingCfgRotate ||= Date.now(); // a la pròxima pausa (o en 20 s), no a mitja frase
       }
       broadcast();
