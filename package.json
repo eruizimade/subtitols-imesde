@@ -1,6 +1,6 @@
 {
   "name": "subtitols-imesde",
-  "version": "1.4.9",
+  "version": "2.0.0",
   "description": "Subtítols en directe (OpenAI) · IMESDE",
   "main": "app/main.mjs",
   "scripts": {
