@@ -63,7 +63,10 @@
   .row.src .box { --fs: calc(var(--size) * .72); }
   .text { position: absolute; left: 0; right: 0; top: 0; font-size: var(--fs); line-height: var(--lh); font-weight: 500; text-shadow: var(--shadow);
           transition: transform .55s cubic-bezier(.3,.7,.2,1); will-change: transform; }
-  body.smooth .text { transition: none; } /* Suau: el moviment el fan la molla i cada paraula (vegeu rollLane) */
+  body.smooth .text { transition: none; }
+  /* Per frase: la frase nova entra amb un fos i la vella (una còpia, .ghost) se'n va amb un altre */
+  body.frase .text { transition: transform .55s cubic-bezier(.3,.7,.2,1), opacity .4s ease; }
+  .text.ghost { transition: opacity .35s ease !important; pointer-events: none; } /* Suau: el moviment el fan la molla i cada paraula (vegeu rollLane) */
   [data-align="center"] .text { text-align: center; }
   .row.src .text { color: var(--dim); font-weight: 400; }
   /* inline-block: perquè cada paraula pugui lliscar sola (un transform no s'aplica a un element inline) */
@@ -126,7 +129,7 @@
     }
     next.showMap = map;
     next.slots = Math.max(next.langs.length, ...Object.values(map).map((a) => a.length));
-    next.motion = next.motion === 'smooth' ? 'smooth' : 'classic'; // per defecte, el de sempre
+    next.motion = ['smooth', 'frase'].includes(next.motion) ? next.motion : 'classic'; // per defecte, el de sempre
     const rebuild = JSON.stringify([next.langs, next.src, next.slots, next.motion]) !== JSON.stringify([cfg.langs, cfg.src, cfg.slots, cfg.motion]) || !document.getElementById('rows').children.length;
     cfg = next;
     const root = document.documentElement;
@@ -146,12 +149,13 @@
     root.style.setProperty('--mb', mb + 'vh');
     if (cfg.guide) root.dataset.guide = ''; else delete root.dataset.guide;
     const rg = Number(cfg.rowGap);
-    root.style.setProperty('--rowgap', rg >= 0 && rg <= 6 ? String(rg) : '1');
+    root.style.setProperty('--rowgap', rg >= 0 && rg <= 10 ? String(rg) : '1');
     const fw = Number(cfg.weight);
     if (fw >= 100 && fw <= 900) { root.dataset.fw = ''; root.style.setProperty('--fw', String(Math.round(fw / 100) * 100)); }
     else { delete root.dataset.fw; root.style.removeProperty('--fw'); }
     document.body.classList.toggle('notags', !cfg.tags);
     document.body.classList.toggle('smooth', cfg.motion === 'smooth');
+    document.body.classList.toggle('frase', cfg.motion === 'frase');
     if (rebuild) {
       const rows = document.getElementById('rows');
       rows.innerHTML = '';
@@ -202,6 +206,25 @@
 
     // 1. Paraules que hi ha d'haver, amb una clau estable (frase:posició)
     const smooth = cfg.motion === 'smooth';
+    // PER FRASE: només la frase en curs (l'última que ja té text en aquesta llengua), quieta, com un subtítol de
+    // cinema; quan en comença una altra, la vella es fon i la nova hi entra amb un fos. Res no puja.
+    const frase = cfg.motion === 'frase';
+    if (frase) {
+      let cur = null;
+      for (let j = blocks.length - 1; j >= 0 && !cur; j--) if (get(blocks[j]).trim()) cur = blocks[j];
+      blocks = cur ? [cur] : [];
+      if (cur && lane.curId != null && lane.curId !== cur.id && lane.el.childNodes.length) {
+        const gh = lane.el.cloneNode(true);
+        gh.removeAttribute('data-k'); gh.classList.add('ghost');
+        lane.el.parentElement.appendChild(gh);
+        requestAnimationFrame(() => { gh.style.opacity = '0'; });
+        setTimeout(() => gh.remove(), 600);
+        lane.top = 0; lane.lastMove = now;
+        lane.el.style.opacity = '0';
+        requestAnimationFrame(() => requestAnimationFrame(() => { lane.el.style.opacity = ''; }));
+      }
+      if (cur) lane.curId = cur.id;
+    }
     const want = [];
     let prevSpeaker;
     const lastId = blocks.length ? blocks[blocks.length - 1].id : null;
@@ -210,7 +233,9 @@
       const words = get(b).trim().split(/\s+/).filter(Boolean).flatMap((w) => (w.length > 24 ? w.match(/.{1,20}/gu) : [w]));
       if (!words.length) continue;
       // Suau: cada frase comença en una línia nova (si una frase es reescriu, només es mouen les SEVES línies)
-      const brk = (prevSpeaker !== undefined && b.speaker !== prevSpeaker) || (smooth && want.length > 0);
+      // …i les frases de la Lectura literal també: arriben senceres i, enganxades a la línia de la frase anterior,
+      // la tornaven a repartir i, centrada, saltava 300 px de costat (assaig del 15/10)
+      const brk = (prevSpeaker !== undefined && b.speaker !== prevSpeaker) || ((smooth || b.literal) && want.length > 0);
       prevSpeaker = b.speaker;
       // Una paraula que ja ha sortit no desapareix encara que la traducció nova sigui més curta (els dos moviments)
       for (let i = words.length; ; i++) { const sp = lane.spans.get(`${b.id}:${i}`); if (!sp || !lane.revealed?.has(sp)) break; words.push(sp.textContent); }
@@ -339,9 +364,11 @@
       const nx = sp.offsetLeft, ny = sp.offsetTop;
       if (sp._cx != null && !sp.classList.contains('wait')) {
         const dx = sp._cx - nx, dy = sp._cy - ny;
-        if (Math.abs(dy) > 2 || Math.abs(dx) > width * 0.25) {
-          if (Math.abs(dy) > 2 && Math.abs(dy) < width) { sp.style.transform = ''; sp.classList.remove('reflow'); void sp.offsetWidth; sp.classList.add('reflow'); }
+        if (Math.abs(dy) > 2) {
+          // canvia de línia: es fon i reapareix al lloc nou
+          if (Math.abs(dy) < width) { sp.style.transform = ''; sp.classList.remove('reflow'); void sp.offsetWidth; sp.classList.add('reflow'); }
         } else if (Math.abs(dx) > 0.5) {
+          // mateixa línia (centrada que es recentra): llisca, per gran que sigui el desplaçament
           const cs = getComputedStyle(sp).transform;
           const m = new DOMMatrixReadOnly(cs === 'none' ? undefined : cs);
           sp.style.transition = 'none'; sp.style.transform = `translateX(${dx + m.m41}px)`; moved.push(sp);

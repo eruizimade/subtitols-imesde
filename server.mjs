@@ -125,7 +125,7 @@ function broadcast() {
       // a la vista tota la nit (s'acaba aprenent a no mirar-ho)
       errors: state.errors.filter((e) => Date.now() - e.t < 180000).slice(-4).map((e) => e.text),
       literal: { on: literal.on, i: literal.last, n: guio?.segments.length || 0, text: guio?.segments[literal.last]?.src || '' },
-      blocks: blocks.filter((b) => !b.hidden).slice(-10).map((b) => ({ id: b.id, speaker: b.speaker, src: b.src, tr: b.tr, final: b.final, t0: b.t0, tEnd: b.tEnd, spoken: spokenLang(b) })),
+      blocks: blocks.filter((b) => !b.hidden).slice(-10).map((b) => ({ id: b.id, speaker: b.speaker, src: b.src, tr: b.tr, final: b.final, t0: b.t0, tEnd: b.tEnd, spoken: spokenLang(b), literal: !!b.literal })),
       now: Date.now(),
       upstream: upstream?.readyState === WebSocket.OPEN ? 'open' : upstream?.readyState === WebSocket.CONNECTING ? 'connecting' : upstream ? 'down' : 'none',
       lastText: lastSpeech,

@@ -289,13 +289,13 @@
           <button class="btn btn-ghost btn-sm" id="areaReset">Per defecte</button>
         </div>
         <label class="switch" title="Dibuixa a la sortida el requadre que ocupen els subtítols, per encaixar-lo al muntatge (recorda apagar-ho abans de l’acte)"><input type="checkbox" id="areaGuide"><span></span><b>marcar l’àrea a la sortida</b></label>
-        <div class="grp" title="Espai entre un idioma i el següent">Separació <input type="range" id="rowGap" min="0.5" max="4" step="0.1"></div>
+        <div class="grp" title="Espai entre un idioma i el següent">Separació <input type="range" id="rowGap" min="0.5" max="10" step="0.1"></div>
         <label class="switch" title="Cada idioma amb el seu color (mana sobre el del fons)"><input type="checkbox" id="colorize"><span></span>colors per idioma</label>
         <span class="area" id="langColors"></span>
         <div class="grp">Línies <div class="seg" id="lines"></div></div>
         <div class="grp">Posició <div class="seg" id="pos"></div></div>
         <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
-        <div class="grp" title="Com es mou el text. Clàssic: línia a línia (el de sempre). Suau: les paraules entren una a una i el bloc puja lliscant. Es canvia en calent, sense reiniciar">Moviment <div class="seg" id="motion"></div></div>
+        <div class="grp" title="Com es mou el text. Clàssic: línia a línia (el de sempre). Per frase: cada frase sencera i quieta, com un subtítol de cinema, fins que en comença una altra. Suau: les paraules entren una a una i el bloc puja lliscant. Es canvia en calent, sense reiniciar">Moviment <div class="seg" id="motion"></div></div>
         <label class="switch"><input type="checkbox" id="showSrc"><span></span>original</label>
         <label class="switch"><input type="checkbox" id="showSpeaker"><span></span>ponent</label>
         <label class="switch" title="Les marques EN / ES al costat de cada llengua"><input type="checkbox" id="showTags"><span></span>indicadors d’idioma (EN/ES)</label>
@@ -779,8 +779,8 @@ seg('lines', [[1, '1'], [2, '2'], [3, '3']], 'lines');
 seg('pos', [['bottom', 'Baix'], ['center', 'Mig'], ['top', 'Dalt']], 'pos');
 if (prefs.display.dwell == null) prefs.display.dwell = 2.5;
 seg('dwell', [[1.5, 'Àgil'], [2.5, 'Normal'], [3.5, 'Pausada']], 'dwell');
-if (prefs.display.motion !== 'smooth') prefs.display.motion = 'classic';
-seg('motion', [['classic', 'Clàssic'], ['smooth', 'Suau']], 'motion');
+if (!['smooth', 'frase'].includes(prefs.display.motion)) prefs.display.motion = 'classic';
+seg('motion', [['classic', 'Clàssic'], ['frase', 'Per frase'], ['smooth', 'Suau']], 'motion');
 $('size').value = prefs.display.size;
 $('size').oninput = () => { prefs.display.size = Number($('size').value); saveDisplay(); };
 for (const [id, key] of [['showSrc', 'src'], ['showSpeaker', 'speaker'], ['showTags', 'tags']]) {
