@@ -70,8 +70,8 @@
   /* Entrades i sortides amb fos: la paraula nova apareix desenfocada i una mica avall i s'hi assenta;
      la línia que surt per dalt puja i es desfà. «translate» (propietat a part) no topa amb el «transform»
      que fa servir el lliscament. */
-  .w { transition: opacity .35s ease, color .6s ease; }
-  body.smooth .w { display: inline-block; transition: var(--w-tr); }
+  .w { display: inline-block; transition: opacity .35s ease, color .6s ease; }
+  body.smooth .w { transition: var(--w-tr); }
   :root { --w-tr: opacity .4s ease, color .9s ease; }
   .w.reflow { animation: wIn .45s ease; }   /* paraula que canvia de línia: s'esvaeix i reapareix al lloc nou */
   @keyframes wIn { from { opacity: 0; } }
@@ -212,8 +212,8 @@
       // Suau: cada frase comença en una línia nova (si una frase es reescriu, només es mouen les SEVES línies)
       const brk = (prevSpeaker !== undefined && b.speaker !== prevSpeaker) || (smooth && want.length > 0);
       prevSpeaker = b.speaker;
-      // Suau: una paraula que ja ha sortit no desapareix encara que la traducció nova sigui més curta
-      if (smooth) for (let i = words.length; ; i++) { const sp = lane.spans.get(`${b.id}:${i}`); if (!sp || !lane.revealed?.has(sp)) break; words.push(sp.textContent); }
+      // Una paraula que ja ha sortit no desapareix encara que la traducció nova sigui més curta (els dos moviments)
+      for (let i = words.length; ; i++) { const sp = lane.spans.get(`${b.id}:${i}`); if (!sp || !lane.revealed?.has(sp)) break; words.push(sp.textContent); }
       words.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0 }));
     }
 
@@ -234,8 +234,9 @@
         span._space = document.createTextNode(' ');
         span._br = document.createElement('br');
         lane.spans.set(x.key, span);
-      } else if (span.textContent !== x.w && !(smooth && lane.revealed?.has(span))) {
-        // (Suau: una paraula que ja s'ha ensenyat no es reescriu: era el que feia créixer i decréixer les línies)
+      } else if (span.textContent !== x.w && !lane.revealed?.has(span)) {
+        // Una paraula que ja s'ha ensenyat no es reescriu: la traducció final d'OpenAI tornava a escriure
+        // paraules que el públic ja havia llegit i la línia creixia, decreixia i saltava (els dos moviments)
         span.textContent = x.w;
       }
       span.classList.toggle('old', x.old);
@@ -316,14 +317,41 @@
       lane.lastMove = now;
     }
     // 5. Es veuen les línies [top, top+N); les de sota esperen el seu torn. Ancorat a BAIX.
+    lane.revealed ??= new WeakSet();
     lines.forEach((ln, i) => {
-      for (const s of ln.spans) { s.classList.toggle('wait', i >= lane.top + N); s.classList.toggle('gone', i < lane.top); }
+      for (const s of ln.spans) { const w = i >= lane.top + N; s.classList.toggle('wait', w); s.classList.toggle('gone', i < lane.top); if (!w) lane.revealed.add(s); }
     });
     const lh = lines.length > 1 ? lines[1].top - lines[0].top : parseFloat(getComputedStyle(lane.el).lineHeight) || 0;
     const shown = Math.min(N, Math.max(0, lines.length - lane.top));
     const y = lines.length ? (N - shown) * lh - lines[lane.top].top : 0;
     lane.el.style.transform = `translateY(${y}px)`;
     lane.backlog = target - lane.top;
+    settleWords(lane, lines);
+  }
+  // Clàssic sense salts dins de la línia: una línia CENTRADA es recentra a cada paraula nova i les paraules
+  // anaven de costat de cop (127 salts en 20 s a l'assaig del 15/10). Ara hi llisquen; la que passa a la línia
+  // de sota es fon i hi reapareix. La pujada de línia (el «translateY» del bloc) és la de sempre.
+  function settleWords(lane, lines) {
+    if (reduceMotion.matches) return;
+    const width = lane.el.clientWidth || 1;
+    const moved = [];
+    for (const ln of lines) for (const sp of ln.spans) {
+      const nx = sp.offsetLeft, ny = sp.offsetTop;
+      if (sp._cx != null && !sp.classList.contains('wait')) {
+        const dx = sp._cx - nx, dy = sp._cy - ny;
+        if (Math.abs(dy) > 2 || Math.abs(dx) > width * 0.25) {
+          if (Math.abs(dy) > 2 && Math.abs(dy) < width) { sp.style.transform = ''; sp.classList.remove('reflow'); void sp.offsetWidth; sp.classList.add('reflow'); }
+        } else if (Math.abs(dx) > 0.5) {
+          const cs = getComputedStyle(sp).transform;
+          const m = new DOMMatrixReadOnly(cs === 'none' ? undefined : cs);
+          sp.style.transition = 'none'; sp.style.transform = `translateX(${dx + m.m41}px)`; moved.push(sp);
+        }
+      }
+      sp._cx = nx; sp._cy = ny;
+    }
+    if (!moved.length) return;
+    void lane.el.offsetWidth;
+    for (const sp of moved) { sp.style.transition = `transform 300ms cubic-bezier(.25,.8,.25,1), opacity .35s ease, color .6s ease`; sp.style.transform = ''; }
   }
 
   // ─── PUJADA SUAU (2 línies o més) ───────────────────────────────────────
