@@ -403,6 +403,8 @@ function onState(s) {
   if (s.running) { stoppedBySelf = false; stoppedAlarm = 0; }
   lastState = s;
   syncListen(s);
+  // La traducció que s'aplica és la del SERVIDOR: si s'ha reiniciat (actualització), torna a «Ràpida» i el panell ho ha de dir
+  if (s.config?.quality && s.config.quality !== prefs.quality && Date.now() - (window.qualityChangedAt || 0) > 2000) { prefs.quality = s.config.quality; save('quality', prefs.quality); renderQuality(); }
   syncLiteral(s);
   if (s.native?.active) {
     if (s.native.lastAt) lastFrameAt = performance.now() - Math.max(0, s.now - s.native.lastAt);
@@ -943,7 +945,7 @@ function renderQuality() {
     ? 'Espera que acabi cada frase i la tradueix sencera amb el model gran: surt una mica més tard, però surt bé i no es reescriu.'
     : 'Tradueix mentre es parla: surt de seguida, però la frase es va reescrivint.';
 }
-$('quality').onclick = (e) => { const v = e.target.dataset.v; if (!v || v === prefs.quality) return; prefs.quality = v; save('quality', v); renderQuality(); sendConfig(); toast(v === 'millor' ? 'Traducció MILLOR: frase acabada, model gran' : 'Traducció RÀPIDA'); };
+$('quality').onclick = (e) => { const v = e.target.dataset.v; if (!v || v === prefs.quality) return; prefs.quality = v; window.qualityChangedAt = Date.now(); save('quality', v); renderQuality(); sendConfig(); toast(v === 'millor' ? 'Traducció MILLOR: frase acabada, model gran' : 'Traducció RÀPIDA'); };
 renderQuality();
 
 renderMode();

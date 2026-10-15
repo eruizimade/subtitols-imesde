@@ -469,7 +469,9 @@ function onTranscriptDelta(delta) {
   }
 
   clearTimeout(b.idle);
-  b.idle = setTimeout(() => finalize(b), IDLE_COMMIT_MS);
+  // «Millor»: una pausa curta no tanca la frase (es tallava a mitja paraula: «Conf» + «iança», i el tros sol
+  // es traduïa malament). Cal un silenci més llarg.
+  b.idle = setTimeout(() => finalize(b), state.config.quality === 'millor' ? Number(process.env.IDLE_COMMIT_MILLOR_MS || 2000) : IDLE_COMMIT_MS);
   // Traducció «Millor»: no es tradueix la frase a mitges (cada versió reescrivia l'anterior); s'espera que
   // s'acabi i es tradueix sencera, un sol cop. Surt més tard, però surt bé i no es reescriu.
   if (state.config.quality !== 'millor' && !b.trTimer && b.src.trim().split(/\s+/).length >= 2) {
