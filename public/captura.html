@@ -241,6 +241,7 @@
         <label class="switch"><input type="checkbox" id="showTags"><span></span>etiquetes</label>
         <label class="switch"><input type="checkbox" id="center"><span></span>centrat</label>
         <label class="switch" title="Durant la música o el descans: la pantalla queda en blanc encara que el sistema escriba alguna cosa"><input type="checkbox" id="hideScreen"><span></span><b>amagar pantalla</b></label>
+        <label class="switch" title="Si hi ha una segona pantalla (HDMI, projector), la pantalla del públic s’hi obre sola a pantalla completa"><input type="checkbox" id="autoScreen"><span></span>obrir sola a la 2a pantalla</label>
       </div>
       <div class="urls" id="urls"></div>
     </section>
@@ -741,6 +742,26 @@ $('hideBtn').onclick = () => { $('hideScreen').checked = !$('hideScreen').checke
 $('center').checked = prefs.display.align === 'center';
 $('center').onchange = () => { prefs.display.align = $('center').checked ? 'center' : 'left'; saveDisplay(); };
 $('openDisplay').onclick = () => window.open('/pantalla', 'subtitols-pantalla', 'width=1280,height=720');
+
+// ─── Pantalla del públic sola a la 2a pantalla ───
+// A l'app, window.open('/pantalla') l'obre a la sortida externa i a pantalla completa. Aquí es demana sola:
+// en obrir el panell (un cop per sessió de l'app: recarregar el panell no la fa parpellejar) i quan es connecta
+// una segona pantalla. Sense pantalla externa no s'obre res (no tapa el panell).
+prefs.autoScreen = load('autoScreen', true);
+$('autoScreen').checked = prefs.autoScreen;
+$('autoScreen').onchange = () => { prefs.autoScreen = $('autoScreen').checked; save('autoScreen', prefs.autoScreen); if (prefs.autoScreen) autoOpenScreen(true); };
+function autoOpenScreen(force) {
+  if (!prefs.autoScreen || !window.screen?.isExtended) return;
+  try { if (!force && sessionStorage.getItem('pantallaAuto')) return; sessionStorage.setItem('pantallaAuto', '1'); } catch {}
+  window.open('/pantalla', 'subtitols-pantalla', 'width=1280,height=720');
+}
+setTimeout(() => autoOpenScreen(false), 1500);
+let wasExtended = !!window.screen?.isExtended;
+window.screen?.addEventListener?.('change', () => {
+  const ext = !!window.screen.isExtended;
+  if (ext && !wasExtended) autoOpenScreen(true); // només en CONNECTAR-la (no a cada canvi de resolució)
+  wasExtended = ext;
+});
 fetch('/info').then((r) => r.json()).then((info) => {
   $('urls').innerHTML = '<span>Des d’un altre ordinador:</span>' +
     (info.lan.length ? info.lan.map((u) => `<code title="Copiar">${u}/pantalla</code>`).join('') : '<span>sense xarxa</span>') +
