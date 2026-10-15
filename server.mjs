@@ -69,7 +69,7 @@ const state = {
   running: false,
   startedAt: null,
   audioMs: 0,
-  config: { mode: 'equilibrat', sourceLang: 'auto', showMap: {}, targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
+  config: { mode: 'equilibrat', quality: 'rapida', sourceLang: 'auto', showMap: {}, targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
   display: null, // configuració de la pantalla que tria l'operador
   errors: [],
   latency: { translate: null },
@@ -273,7 +273,8 @@ async function streamTranslateOnce(text, lang, onText, signal, final = false, sr
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
     headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: TRANSLATE_MODEL,
+      // «Millor»: el model gran (més lent, més bo). «Ràpida»: el de sempre
+      model: state.config.quality === 'millor' ? (process.env.TRANSLATE_MODEL_MILLOR || 'gpt-4.1') : TRANSLATE_MODEL,
       stream: true,
       stream_options: { include_usage: true },
       temperature: 0.2,
@@ -469,7 +470,9 @@ function onTranscriptDelta(delta) {
 
   clearTimeout(b.idle);
   b.idle = setTimeout(() => finalize(b), IDLE_COMMIT_MS);
-  if (!b.trTimer && b.src.trim().split(/\s+/).length >= 2) {
+  // Traducció «Millor»: no es tradueix la frase a mitges (cada versió reescrivia l'anterior); s'espera que
+  // s'acabi i es tradueix sencera, un sol cop. Surt més tard, però surt bé i no es reescriu.
+  if (state.config.quality !== 'millor' && !b.trTimer && b.src.trim().split(/\s+/).length >= 2) {
     b.trTimer = setTimeout(() => { b.trTimer = null; if (!b.final) translateBlock(b); }, PARTIAL_MS);
   }
   broadcast();
@@ -636,6 +639,7 @@ function sanitizeConfig(c = {}) {
     for (const [sp, arr] of Object.entries(c.showMap)) if (LANG_NAMES[sp] && Array.isArray(arr)) out.showMap[sp] = [...new Set(arr.filter((l) => LANG_NAMES[l]))].slice(0, 4);
   }
   if (typeof c.mode === 'string' && MODES[c.mode]) out.mode = c.mode;
+  if (c.quality === 'rapida' || c.quality === 'millor') out.quality = c.quality;
   if (Array.isArray(c.targets)) out.targets = c.targets.filter((t) => typeof t === 'string').slice(0, 6);
   if (typeof c.prompt === 'string') out.prompt = c.prompt.slice(0, 1500);
   if (Array.isArray(c.speakers)) out.speakers = c.speakers.map((s) => String(s || '').slice(0, 60));

@@ -247,6 +247,9 @@
       <label class="f">Transcripció</label>
       <div class="seg" id="mode" style="margin:-6px 0 6px"></div>
       <p class="hint" style="margin:0 0 16px" id="modeHint"></p>
+      <label class="f">Traducció</label>
+      <div class="seg" id="quality" style="margin:-6px 0 6px"></div>
+      <p class="hint" style="margin:0 0 16px" id="qualityHint"></p>
       <label class="f">Es parla en</label>
       <div class="seg" id="srcLang" style="margin:-6px 0 16px"></div>
       <label class="f">Subtítols en</label>
@@ -333,6 +336,7 @@ const prefs = {
   sourceLang: load('sourceLang', 'auto'),
   showMap: load('showMap', {}),
   mode: load('mode2', 'equilibrat'),
+  quality: load('quality', 'rapida'),
   enhance: load('enhance', false), // per la taula de so ha d'anar APAGADA (l'AGC i el filtre de soroll fan mal)
   targets: load('targets', ['ca', 'es', 'en']),
   prompt: load('prompt', ''),
@@ -350,7 +354,7 @@ let lastStart = null;
 function send(o) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
 function sendConfig() { send({ type: 'config', config: configPayload() }); }
 function configPayload() {
-  return { mode: prefs.mode, sourceLang: prefs.sourceLang, showMap: prefs.showMap || {}, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
+  return { mode: prefs.mode, quality: prefs.quality, sourceLang: prefs.sourceLang, showMap: prefs.showMap || {}, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
     input: isNative() && nativeInfo() ? { native: nativeInfo().uid, name: nativeInfo().name, channels: nativeInfo().channels } : null };
 }
 function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets, showMap: prefs.showMap || {} } }); }
@@ -931,6 +935,16 @@ fetch('/info').then((r) => r.json()).then((info) => {
     `<span class="muted" style="margin-left:auto">traducció: ${esc(info.models.TRANSLATE_MODEL)} · v${esc(info.version || '')}</span>`;
   $('urls').onclick = (e) => { if (e.target.tagName === 'CODE') { navigator.clipboard.writeText(e.target.textContent); toast('Adreça copiada'); } };
 });
+
+// ─── Traducció: Ràpida (frase a frase mentre es diu) / Millor (frase acabada, model gran) ───
+function renderQuality() {
+  $('quality').innerHTML = [['rapida', 'Ràpida'], ['millor', 'Millor']].map(([v, t]) => `<button data-v="${v}" class="${prefs.quality === v ? 'on' : ''}">${t}</button>`).join('');
+  $('qualityHint').textContent = prefs.quality === 'millor'
+    ? 'Espera que acabi cada frase i la tradueix sencera amb el model gran: surt una mica més tard, però surt bé i no es reescriu.'
+    : 'Tradueix mentre es parla: surt de seguida, però la frase es va reescrivint.';
+}
+$('quality').onclick = (e) => { const v = e.target.dataset.v; if (!v || v === prefs.quality) return; prefs.quality = v; save('quality', v); renderQuality(); sendConfig(); toast(v === 'millor' ? 'Traducció MILLOR: frase acabada, model gran' : 'Traducció RÀPIDA'); };
+renderQuality();
 
 renderMode();
 renderLangs(); renderSwap();
