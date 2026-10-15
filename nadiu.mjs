@@ -32,6 +32,7 @@ export function createNative({ bin, onFrame, onStatus, log }) {
   let acc = [];                // mostres a 24 kHz pendents de formar bloc, per canal
   let srcRate = 0, nCh = 0;
   let active = 0, quiet = 0, hold = [];
+  let lastStatusAt = 0;
   const status = { active: false, uid: null, name: null, channels: 0, levels: [], speaker: 255, lastAt: 0, error: null };
 
   function resetDsp(k, rate) {
@@ -86,6 +87,9 @@ export function createNative({ bin, onFrame, onStatus, log }) {
       for (let i = 0; i < BLOCK; i++) { const s = Math.max(-1, Math.min(1, src[i])); frame.writeInt16LE(s < 0 ? s * 0x8000 : s * 0x7fff, 1 + i * 2); }
       status.levels = levels; status.speaker = sp; status.lastAt = Date.now();
       onFrame(frame);
+      // L'estat (nivells, «encara arriba àudio») surt cap al panell 5 cops per segon: si no, el panell
+      // només el veia amb el latit de 2 s i es pensava que l'àudio s'havia aturat (alarma falsa)
+      if (status.lastAt - lastStatusAt >= 200) { lastStatusAt = status.lastAt; onStatus(); }
     }
   }
 
