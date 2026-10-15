@@ -61,16 +61,28 @@
   /* La caixa fa N línies; el text a dins puja LÍNIA A LÍNIA, amb un temps mínim a la vista */
   .box { --fs: var(--size); position: relative; flex: 1; height: calc(var(--fs) * var(--lh) * var(--lines)); overflow: hidden; }
   .row.src .box { --fs: calc(var(--size) * .72); }
+  /* Desplaçament continu: la línia de dalt es fon a la vora mentre surt */
+  body.roll .box { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 calc(var(--fs) * var(--lh) * .7), #000 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 calc(var(--fs) * var(--lh) * .7), #000 100%); }
   .text { position: absolute; left: 0; right: 0; top: 0; font-size: var(--fs); line-height: var(--lh); font-weight: 500; text-shadow: var(--shadow);
-          transition: transform .55s cubic-bezier(.3,.7,.2,1); will-change: transform; }
+          will-change: transform; } /* el moviment el fa cada paraula (vegeu «llisca» a renderLane) */
   [data-align="center"] .text { text-align: center; }
   .row.src .text { color: var(--dim); font-weight: 400; }
-  .w { transition: opacity .35s ease, color .6s ease; }
-  .w.wait { opacity: 0; }          /* ja ha arribat però encara no toca ensenyar-la */
-  .w.gone { opacity: 0; }          /* línia que surt per dalt */
+  /* inline-block: perquè cada paraula pugui lliscar sola (un transform no s'aplica a un element inline) */
+  /* Entrades i sortides amb fos: la paraula nova apareix desenfocada i una mica avall i s'hi assenta;
+     la línia que surt per dalt puja i es desfà. «translate» (propietat a part) no topa amb el «transform»
+     que fa servir el lliscament. */
+  .w { display: inline-block; transition: var(--w-tr); }
+  :root { --w-tr: opacity .6s ease, filter .6s ease, translate .6s cubic-bezier(.22,1,.36,1), color .9s ease; }
+  .w.reflow { animation: wIn .45s ease; }   /* paraula que canvia de línia: s'esvaeix i reapareix al lloc nou */
+  @keyframes wIn { from { opacity: 0; filter: blur(3px); } }
+  .w.wait { opacity: 0; filter: blur(5px); translate: 0 .28em; }   /* ja ha arribat però encara no toca ensenyar-la */
+  .w.gone { opacity: 0; filter: blur(4px); translate: 0 -.22em; }  /* línia que surt per dalt */
+  /* El fos d'entrada i de sortida mana sobre els fons que forcen el text opac (DSK, Blanc, colors per idioma) */
+  .text .w.wait, .text .w.gone { opacity: 0 !important; }
   .w.old { color: var(--dim); }    /* frases anteriors */
   .row.src .w.old { opacity: .7; }
-  @media (prefers-reduced-motion: reduce) { .text, .w { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .text, .w { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
@@ -212,6 +224,7 @@
       if (!span) {
         span = document.createElement('span');
         span.className = 'w wait';
+        span._new = true;
         span.textContent = x.w;
         span._space = document.createTextNode(' ');
         span._br = document.createElement('br');
@@ -240,12 +253,20 @@
     }
     const N = cfg.lines;
     const target = Math.max(0, lines.length - N);
+    document.body.classList.toggle('roll', N >= 2);
+    if (N >= 2) return rollLane(lane, lines, N, now);
 
     // 4. Puja com a molt UNA línia cada «dwell» segons. Si s'acumula massa feina,
     //    s'escurça l'espera (i si ens quedem molt enrere, es salta) perquè
     //    la pantalla no vagi mai massa per darrere del que es diu.
+    // ÀNCORA: la línia de dalt és la de la primera paraula que ja es veia. Quan la traducció d'una frase
+    // es reescriu, les línies es tornen a partir i el número de línia canvia: si es seguís el número, el
+    // text que ja havia marxat per dalt tornava a aparèixer (o se'n saltava un tros).
+    const ai = lane.anchor ? lines.findIndex((ln) => ln.spans.includes(lane.anchor)) : -1;
+    if (ai >= 0) lane.top = ai;
     if (lane.resync) { lane.top = target; lane.lastMove = now; lane.resync = false; }
-    if (lane.top > target) lane.top = target;
+    if (lane.top > target && ai < 0) lane.top = target;
+    lane.top = Math.max(0, Math.min(lane.top, lines.length - 1));
     if (lane.top < target) {
       const behind = target - lane.top;
       const dwell = cfg.dwell * 1000 * (behind >= 3 ? 0.35 : behind === 2 ? 0.6 : 1);
@@ -259,14 +280,123 @@
     //    Ancorat a BAIX: amb menys de N línies, el text baixa fins a l'última posició,
     //    així totes les llengües tenen sempre la línia nova al mateix lloc i
     //    l'espai entre blocs no canvia (17/09/2026, «l'interlineat va canviant»).
-    lines.forEach((ln, i) => {
-      for (const s of ln.spans) { s.classList.toggle('wait', i >= lane.top + N); s.classList.toggle('gone', i < lane.top); }
-    });
     const lh = lines.length > 1 ? lines[1].top - lines[0].top : parseFloat(getComputedStyle(lane.el).lineHeight) || 0;
     const shown = Math.min(N, Math.max(0, lines.length - lane.top));
     const y = lines.length ? (N - shown) * lh - lines[lane.top].top : 0;
     lane.el.style.transform = `translateY(${y}px)`;
+    glide(lane, lines, y);
+    // Les classes, DESPRÉS del lliscament: així la paraula que surt per dalt s'esvaeix MENTRE puja
+    lines.forEach((ln, i) => {
+      for (const s of ln.spans) { s.classList.toggle('wait', i >= lane.top + N); s.classList.toggle('gone', i < lane.top); }
+    });
+    lane.anchor = lines[lane.top]?.spans[0] || null;
     lane.backlog = target - lane.top;
+  }
+
+  // ─── DESPLAÇAMENT CONTINU (2 línies o més) ──────────────────────────────
+  // En comptes de pujar una línia sencera de cop cada pocs segons (aturat · salt · aturat), el bloc puja de
+  // mica en mica AL RITME QUE S'ESCRIU: la posició depèn de quant és plena l'última línia, de manera que
+  // quan en comença una de nova ja s'ha fet gairebé tot el camí. L'última paraula sempre es veu al moment:
+  // no hi ha cap retard. El moviment el fa una molla esmorteïda (sense arrencades ni frenades seques).
+  function rollLane(lane, lines, N, now) {
+    if (!lines.length) { lane.lines = null; lane.backlog = 0; return; } // aquesta llengua encara no té res
+    const lh = lines.length > 1 ? lines[1].top - lines[0].top : parseFloat(getComputedStyle(lane.el).lineHeight) || 0;
+    const width = lane.el.clientWidth || 1;
+    // 1. Si s'ha tret text de dalt de tot (frases velles que cauen), tot el bloc es desplaça igual: es
+    //    compensa a l'instant, no és cap moviment que s'hagi de veure
+    const dys = new Map();
+    for (const ln of lines) for (const sp of ln.spans) if (sp._oy != null) { const d = Math.round(sp.offsetTop - sp._oy); dys.set(d, (dys.get(d) || 0) + 1); }
+    let shift = 0, best = 0;
+    for (const [d, n] of dys) if (n > best) { best = n; shift = d; }
+    if (lane.cy != null && shift) lane.cy -= shift;
+    // 2. Les paraules que canvien de lloc dins del bloc (línia centrada que es recentra, frase reescrita) hi llisquen
+    const moved = [];
+    for (const ln of lines) for (const sp of ln.spans) {
+      const nx = sp.offsetLeft, ny = sp.offsetTop;
+      if (sp._ox != null && !reduceMotion.matches) {
+        const dx = sp._ox - nx, dy = sp._oy + shift - ny;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          if (Math.abs(dx) > width * 0.25 || Math.abs(dy) > lh * 0.5) { sp.style.transition = 'none'; sp.style.transform = ''; sp.classList.remove('reflow'); void sp.offsetWidth; sp.classList.add('reflow'); sp.style.transition = ''; }
+          else {
+            const cs = getComputedStyle(sp).transform;
+            const m = new DOMMatrixReadOnly(cs === 'none' ? undefined : cs);
+            sp.style.transition = 'none'; sp.style.transform = `translate(${dx + m.m41}px, ${dy + m.m42}px)`; moved.push(sp);
+          }
+        }
+      }
+      sp._ox = nx; sp._oy = ny;
+    }
+    if (moved.length) { void lane.el.offsetWidth; for (const sp of moved) { sp.style.transition = `transform ${GLIDE_MS}ms ${EASE}, var(--w-tr)`; sp.style.transform = ''; } }
+    // 3. On ha d'anar el bloc: l'última línia a baix i, quan la caixa ja és plena, pujant a mesura que s'omple
+    const last = lines[lines.length - 1];
+    let fill = 0;
+    if (lines.length >= N) {
+      let l = Infinity, r = 0;
+      for (const sp of last.spans) { l = Math.min(l, sp.offsetLeft); r = Math.max(r, sp.offsetLeft + sp.offsetWidth); }
+      fill = Math.max(0, Math.min(1, (r - l) / width));
+    }
+    const ty = (N - 1) * lh - last.top - fill * lh;
+    if (lane.cy == null || lane.resync) { lane.cy = ty; lane.v = 0; lane.resync = false; }
+    if (Math.abs(ty - (lane.ty ?? ty)) > 0.5) lane.stepAt = now;
+    lane.ty = ty; lane.lh = lh; lane.lines = lines;
+    // 4. Paraules noves: entren amb el seu fos (al frame següent, perquè la transició arrenqui)
+    const fresh = [];
+    for (const ln of lines) for (const sp of ln.spans) if (sp._new) { sp._new = false; fresh.push(sp); }
+    if (fresh.length) requestAnimationFrame(() => { for (const sp of fresh) sp.classList.remove('wait'); });
+    for (const ln of lines) for (const sp of ln.spans) if (!sp._new && !fresh.includes(sp)) sp.classList.remove('wait');
+    lane.backlog = 0;
+    markGone(lane);
+    if (!lane.raf) lane.raf = requestAnimationFrame((t) => springStep(lane, t, t));
+  }
+  // Les línies que ja han sortit del tot per dalt: fora (amb el seu fos)
+  function markGone(lane) {
+    if (!lane.lines) return;
+    for (const ln of lane.lines) { const out = ln.top + lane.lh + lane.cy < lane.lh * 0.15; for (const sp of ln.spans) sp.classList.toggle('gone', out); }
+  }
+  // Molla esmorteïda (crítica): segueix l'objectiu amb velocitat contínua, sense estrebades
+  const OMEGA = 6; // més alt = més àgil (assenta en ~0,7 s)
+  function springStep(lane, t, tPrev) {
+    const dt = Math.min(0.05, (t - tPrev) / 1000);
+    const d = lane.ty - lane.cy;
+    if (reduceMotion.matches) { lane.cy = lane.ty; lane.v = 0; }
+    else { lane.v = (lane.v || 0) + (OMEGA * OMEGA * d - 2 * OMEGA * (lane.v || 0)) * dt; lane.cy += lane.v * dt; }
+    lane.el.style.transform = `translateY(${lane.cy.toFixed(2)}px)`;
+    if (Math.abs(lane.ty - lane.cy) < 0.3 && Math.abs(lane.v) < 0.5) { lane.cy = lane.ty; lane.v = 0; lane.el.style.transform = `translateY(${lane.cy}px)`; lane.raf = 0; markGone(lane); return; }
+    if ((lane.gf = (lane.gf || 0) + 1) % 6 === 0) markGone(lane);
+    lane.raf = requestAnimationFrame((t2) => springStep(lane, t2, t));
+  }
+
+  // ─── Res no salta: cada paraula que canvia de lloc hi LLISCA ─────────────
+  // Una línia que puja, una línia centrada que es recentra en afegir-s'hi una paraula, una frase que es
+  // reescriu: a cada render es compara on era cada paraula a la pantalla i on ha d'anar, i la diferència es fa
+  // en GLIDE_MS (com a la «FLIP»). No afegeix cap retard: la paraula és al lloc nou des del primer moment,
+  // només s'hi veu arribar. Una paraula que canvia de LÍNIA no creua la pantalla: s'esvaeix i reapareix.
+  const GLIDE_MS = 520;
+  const EASE = 'cubic-bezier(.22,1,.36,1)';
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  function glide(lane, lines, y) {
+    const width = lane.el.clientWidth || 1;
+    const moved = [];
+    for (const ln of lines) for (const s of ln.spans) {
+      const nx = s.offsetLeft, ny = s.offsetTop + y;
+      if (s._sx != null && !reduceMotion.matches && !s.classList.contains('wait')) {
+        const dx = s._sx - nx, dy = s._sy - ny;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          if (Math.abs(dx) > width * 0.25) { s.style.transition = 'none'; s.style.transform = ''; s.classList.remove('reflow'); void s.offsetWidth; s.classList.add('reflow'); s.style.transition = ''; }
+          else {
+            // Si encara venia lliscant, es parteix d'on és ARA (si no, faria un saltet a cada render)
+            const m = new DOMMatrixReadOnly(getComputedStyle(s).transform === 'none' ? undefined : getComputedStyle(s).transform);
+            s.style.transition = 'none';
+            s.style.transform = `translate(${dx + m.m41}px, ${dy + m.m42}px)`;
+            moved.push(s);
+          }
+        }
+      }
+      s._sx = nx; s._sy = ny;
+    }
+    if (!moved.length) return;
+    void lane.el.offsetWidth; // fixa el punt de partida abans d'engegar la transició
+    for (const s of moved) { s.style.transition = `transform ${GLIDE_MS}ms ${EASE}, var(--w-tr)`; s.style.transform = ''; }
   }
 
   function render() {
