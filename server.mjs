@@ -68,7 +68,7 @@ const state = {
   running: false,
   startedAt: null,
   audioMs: 0,
-  config: { mode: 'equilibrat', sourceLang: 'auto', targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
+  config: { mode: 'equilibrat', sourceLang: 'auto', swapLang: 'none', targets: ['ca', 'es', 'en'], prompt: '', speakers: [], speakerLangs: [] },
   display: null, // configuració de la pantalla que tria l'operador
   errors: [],
   latency: { translate: null },
@@ -123,7 +123,7 @@ function broadcast() {
       // Només els errors dels últims 3 minuts: un error passatger de fa dues hores no ha de quedar
       // a la vista tota la nit (s'acaba aprenent a no mirar-ho)
       errors: state.errors.filter((e) => Date.now() - e.t < 180000).slice(-4).map((e) => e.text),
-      blocks: blocks.slice(-10).map(({ id, speaker, src, tr, final, t0, tEnd }) => ({ id, speaker, src, tr, final, t0, tEnd })),
+      blocks: blocks.slice(-10).map((b) => ({ id: b.id, speaker: b.speaker, src: b.src, tr: b.tr, final: b.final, t0: b.t0, tEnd: b.tEnd, spoken: spokenLang(b) })),
       now: Date.now(),
       upstream: upstream?.readyState === WebSocket.OPEN ? 'open' : upstream?.readyState === WebSocket.CONNECTING ? 'connecting' : upstream ? 'down' : 'none',
       lastText: lastSpeech,
@@ -316,7 +316,11 @@ function translateBlock(block) {
   // Idioma del que s'ha dit: el fixat a «Es parla en» quan va començar la frase o, si no, el del ponent.
   // A l'idioma que ja és el de l'original no es tradueix: surt tal qual.
   const srcL = block.srcLang && block.srcLang !== 'auto' ? block.srcLang : block.lang || null;
-  for (const lang of state.config.targets) {
+  // L'idioma de RECANVI (configurable): quan es parla un dels idiomes dels subtítols, la seva fila mostra
+  // aquest altre (p. ex. es parla anglès → la fila EN passa a dir-ho en català). Cal tenir-lo traduït sempre.
+  const swap = state.config.swapLang && state.config.swapLang !== 'none' ? state.config.swapLang : null;
+  const langs = swap && !state.config.targets.includes(swap) ? [...state.config.targets, swap] : state.config.targets;
+  for (const lang of langs) {
     if (srcL === lang || !/\p{L}/u.test(text)) { block.tr[lang] = text; continue; }
     const running = block.jobs[lang];
     if (running && !final) continue; // parcial: si encara corre l'anterior, no n'engeguem una altra
@@ -338,6 +342,23 @@ function translateBlock(block) {
   }
   broadcast();
   return Promise.all(jobs);
+}
+
+// Quin idioma s'ha parlat en una frase: el fixat (Parla / ponent) o, en automàtic, el de la traducció que
+// ha sortit gairebé igual que l'original (traduir anglès a anglès el deixa tal qual)
+const wordSet = (t) => new Set(String(t || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1));
+function spokenLang(b) {
+  const fixed = b.srcLang && b.srcLang !== 'auto' ? b.srcLang : b.lang;
+  if (fixed) return fixed;
+  const src = wordSet(b.src);
+  if (src.size < 3) return null;
+  let best = null, score = 0;
+  for (const [lang, t] of Object.entries(b.tr || {})) {
+    const w = wordSet(t); let h = 0; for (const x of src) if (w.has(x)) h++;
+    const sc = h / Math.max(src.size, w.size);
+    if (sc > score) { score = sc; best = lang; }
+  }
+  return score >= 0.6 ? best : null;
 }
 
 // ─── Frases ─────────────────────────────────────────────────────────────────
@@ -574,6 +595,7 @@ function stop() {
 function sanitizeConfig(c = {}) {
   const out = {};
   if (typeof c.sourceLang === 'string') out.sourceLang = c.sourceLang;
+  if (typeof c.swapLang === 'string') out.swapLang = c.swapLang === 'none' || LANG_NAMES[c.swapLang] ? c.swapLang : 'none';
   if (typeof c.mode === 'string' && MODES[c.mode]) out.mode = c.mode;
   if (Array.isArray(c.targets)) out.targets = c.targets.filter((t) => typeof t === 'string').slice(0, 6);
   if (typeof c.prompt === 'string') out.prompt = c.prompt.slice(0, 1500);

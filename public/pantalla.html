@@ -175,7 +175,9 @@
   function renderLane(k, blocks, now) {
     const lane = lanes[k];
     if (!lane) return;
-    const get = (b) => (k === 'src' ? b.src : b.tr?.[k]) || '';
+    // Es parla l'idioma d'aquesta fila: hi surt l'idioma de recanvi (si n'hi ha), no l'original repetit
+    const swap = last?.config?.swapLang && last.config.swapLang !== 'none' ? last.config.swapLang : null;
+    const get = (b) => (k === 'src' ? b.src : (swap && b.spoken === k && b.tr?.[swap]) || b.tr?.[k]) || '';
 
     // 1. Paraules que hi ha d'haver, amb una clau estable (frase:posició)
     const want = [];
@@ -291,6 +293,14 @@
     for (const k of Object.keys(lanes)) renderLane(k, blocks, localNow);
 
     const cur = blocks[blocks.length - 1];
+    // L'etiqueta de cada fila diu l'idioma que s'hi llegeix ara
+    const swapL = last?.config?.swapLang && last.config.swapLang !== 'none' ? last.config.swapLang : null;
+    for (const [k, l] of Object.entries(lanes)) {
+      if (k === 'src') continue;
+      const tag = l.el.closest('.row')?.querySelector('.tag');
+      const want = (swapL && cur?.spoken === k && cur?.tr?.[swapL] ? swapL : k).toUpperCase();
+      if (tag && tag.textContent !== want) tag.textContent = want;
+    }
     const sp = document.getElementById('speaker');
     const show = cfg.speaker && cur?.speaker;
     sp.classList.toggle('hide', !show);

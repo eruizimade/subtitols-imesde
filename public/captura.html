@@ -216,6 +216,9 @@
       <label class="f">Subtítols en</label>
       <div class="chips" id="targets" style="margin-top:-6px"></div>
       <p class="hint">L’ordre a la pantalla és l’ordre en què els marques (el número).</p>
+      <label class="f" style="margin-top:14px">Quan es parla un idioma dels subtítols, la seva fila mostra</label>
+      <div class="seg" id="swapLang" style="margin:-6px 0 6px"></div>
+      <p class="hint" style="margin:0">Ex.: subtítols EN + ES i aquí «Català» → quan es parla català surt EN + ES; quan es parla anglès, la fila EN passa a català (CA + ES). «Igual» = la fila repeteix el que es diu.</p>
     </section>
 
     <section class="card">
@@ -291,6 +294,7 @@ const prefs = {
   device: load('device', ''),
   speakers: load('speakers', []),            // [{ name, channel }]
   sourceLang: load('sourceLang', 'auto'),
+  swapLang: load('swapLang', 'none'),
   mode: load('mode2', 'equilibrat'),
   enhance: load('enhance', false), // per la taula de so ha d'anar APAGADA (l'AGC i el filtre de soroll fan mal)
   targets: load('targets', ['ca', 'es', 'en']),
@@ -309,7 +313,7 @@ let lastStart = null;
 function send(o) { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); }
 function sendConfig() { send({ type: 'config', config: configPayload() }); }
 function configPayload() {
-  return { mode: prefs.mode, sourceLang: prefs.sourceLang, targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
+  return { mode: prefs.mode, sourceLang: prefs.sourceLang, swapLang: prefs.swapLang || 'none', targets: prefs.targets, prompt: prefs.prompt, speakers: prefs.speakers.map((s) => s.name), speakerLangs: prefs.speakers.map((s) => s.lang || 'auto'), speakerChannels: prefs.speakers.map((s) => s.channel),
     input: isNative() && nativeInfo() ? { native: nativeInfo().uid, name: nativeInfo().name, channels: nativeInfo().channels } : null };
 }
 function sendDisplay() { send({ type: 'display', display: { ...prefs.display, langs: prefs.targets } }); }
@@ -475,6 +479,10 @@ function renderLangs() {
   // L'ordre dels subtítols a la pantalla és l'ordre en què es marquen (el número ho diu)
   $('targets').innerHTML = Object.entries(LANGS).map(([k, v]) => { const n = prefs.targets.indexOf(k); return `<button class="chip ${n >= 0 ? 'on' : ''}" data-v="${k}">${n >= 0 && prefs.targets.length > 1 ? `${n + 1}·` : ''}${v}</button>`; }).join('');
 }
+function renderSwap() {
+  $('swapLang').innerHTML = [['none', 'Igual'], ...Object.entries(LANGS).slice(0, 3)].map(([k, v]) => `<button data-v="${k}" class="${(prefs.swapLang || 'none') === k ? 'on' : ''}">${v}</button>`).join('');
+}
+$('swapLang').onclick = (e) => { const v = e.target.dataset.v; if (!v) return; prefs.swapLang = v; save('swapLang', v); renderSwap(); sendConfig(); };
 function setSourceLang(v) {
   prefs.sourceLang = v; save('sourceLang', v); renderLangs(); sendConfig();
   if (running) toast(v === 'auto' ? 'Es parla en: automàtic' : `Es parla en ${LANGS[v] || v}: s’aplica a la pausa (o en 3 s)`);
@@ -847,7 +855,7 @@ fetch('/info').then((r) => r.json()).then((info) => {
 });
 
 renderMode();
-renderLangs();
+renderLangs(); renderSwap();
 renderSpeakers();
 connect();
 </script>
