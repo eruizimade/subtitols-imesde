@@ -201,6 +201,7 @@
     };
 
     // 1. Paraules que hi ha d'haver, amb una clau estable (frase:posició)
+    const smooth = cfg.motion === 'smooth';
     const want = [];
     let prevSpeaker;
     const lastId = blocks.length ? blocks[blocks.length - 1].id : null;
@@ -208,8 +209,11 @@
       // Una «paraula» llarguíssima (una adreça, text sense espais) es parteix: si no, es tallaria a la vora
       const words = get(b).trim().split(/\s+/).filter(Boolean).flatMap((w) => (w.length > 24 ? w.match(/.{1,20}/gu) : [w]));
       if (!words.length) continue;
-      const brk = prevSpeaker !== undefined && b.speaker !== prevSpeaker;
+      // Suau: cada frase comença en una línia nova (si una frase es reescriu, només es mouen les SEVES línies)
+      const brk = (prevSpeaker !== undefined && b.speaker !== prevSpeaker) || (smooth && want.length > 0);
       prevSpeaker = b.speaker;
+      // Suau: una paraula que ja ha sortit no desapareix encara que la traducció nova sigui més curta
+      if (smooth) for (let i = words.length; ; i++) { const sp = lane.spans.get(`${b.id}:${i}`); if (!sp || !lane.revealed?.has(sp)) break; words.push(sp.textContent); }
       words.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0 }));
     }
 
@@ -230,7 +234,8 @@
         span._space = document.createTextNode(' ');
         span._br = document.createElement('br');
         lane.spans.set(x.key, span);
-      } else if (span.textContent !== x.w) {
+      } else if (span.textContent !== x.w && !(smooth && lane.revealed?.has(span))) {
+        // (Suau: una paraula que ja s'ha ensenyat no es reescriu: era el que feia créixer i decréixer les línies)
         span.textContent = x.w;
       }
       span.classList.toggle('old', x.old);
