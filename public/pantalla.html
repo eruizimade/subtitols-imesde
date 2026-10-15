@@ -71,31 +71,9 @@
   .w.old { color: var(--dim); }    /* frases anteriors */
   .row.src .w.old { opacity: .7; }
   @media (prefers-reduced-motion: reduce) { .text, .w { transition: none; } }
-
-  /* ─── CARTA (prompter): el guió sencer, que baixa a mesura que es llegeix ─── */
-  .carta-wrap { position: absolute; left: var(--ml, 5vw); right: var(--mr, 5vw); top: var(--mt, 6vh); bottom: var(--mb, 6vh); overflow: hidden; transition: opacity .8s ease;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 82%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 82%, transparent 100%); }
-  [data-guide] .carta-wrap { -webkit-mask-image: none; mask-image: none; outline: max(2px, .15vw) dashed var(--fg); outline-offset: -.3vw; }
-  .carta-wrap.idle { opacity: 0; }
-  body:not(.view-carta) .carta-wrap, body.view-carta .stage { display: none; }
-  .carta { position: absolute; left: 0; right: 0; top: 0; will-change: transform; display: grid; grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr)); column-gap: calc(var(--size) * 1.2); }
-  .carta .cs { font-size: calc(var(--size) * .82); line-height: 1.32; font-weight: 500; color: var(--fg); text-shadow: var(--shadow);
-    padding-bottom: calc(var(--size) * .38); opacity: .55; transition: opacity .6s ease; }
-  .carta .cs.read { opacity: .28; }
-  .carta .cs.cur { opacity: 1; }
-  .carta .cs.src { color: var(--dim); font-weight: 400; }
-  [data-align="center"] .carta .cs { text-align: center; }
-  .carta .ch { position: sticky; top: 0; font: 700 calc(var(--size) * .3)/1 "DM Sans", sans-serif; letter-spacing: .24em; color: var(--tag-fg);
-    border-top: 2px solid var(--tag-fg); padding: .45em 0; margin-bottom: calc(var(--size) * .5); }
-  body.notags .carta .ch { display: none; }
-  .carta .cs[data-lc], .carta .ch[data-lc] { color: var(--lc) !important; border-top-color: var(--lc); }
-  /* DSK / Blanc: sense grisos de color (la clau els faria mig transparents); la jerarquia la fa l'opacitat */
-  [data-theme="dsk"] .carta .cs, [data-theme="blanc"] .carta .cs { font-weight: 600; text-shadow: none; color: var(--fg); }
-  [data-fw] .carta .cs { font-weight: var(--fw) !important; }
 </style>
 </head>
 <body>
-<div class="carta-wrap idle" id="cartaWrap"><div class="carta" id="carta"></div></div>
 <div class="stage idle" id="stage">
   <div class="speaker hide" id="speaker"><i></i><span></span></div>
   <div id="rows"></div>
@@ -118,7 +96,7 @@
     const o = {};
     if (q.get('langs')) o.langs = q.get('langs').split(',').filter((l) => /^[a-z]{2,3}$/.test(l));
     for (const k of ['size', 'lines', 'clear', 'dwell']) { const v = Number(q.get(k)); if (q.get(k) && Number.isFinite(v) && v > 0) o[k] = k === 'lines' ? Math.round(v) : v; }
-    for (const k of ['theme', 'pos', 'align', 'font', 'view']) if (q.get(k)) o[k] = q.get(k);
+    for (const k of ['theme', 'pos', 'align', 'font']) if (q.get(k)) o[k] = q.get(k);
     for (const k of ['src', 'tags', 'speaker']) if (q.get(k) != null) o[k] = q.get(k) === '1';
     return o;
   }
@@ -161,8 +139,6 @@
     if (fw >= 100 && fw <= 900) { root.dataset.fw = ''; root.style.setProperty('--fw', String(Math.round(fw / 100) * 100)); }
     else { delete root.dataset.fw; root.style.removeProperty('--fw'); }
     document.body.classList.toggle('notags', !cfg.tags);
-    document.body.classList.toggle('view-carta', cfg.view === 'carta');
-    carta.key = ''; // es refà amb els idiomes / colors nous
     if (rebuild) {
       const rows = document.getElementById('rows');
       rows.innerHTML = '';
@@ -294,7 +270,7 @@
   }
 
   function render() {
-    try { if (cfg.view === 'carta') return renderCarta(); renderNow(); }
+    try { renderNow(); }
     catch (e) { console.error(e); document.getElementById('stage').classList.add('idle'); } // millor en blanc que congelada
   }
   function renderNow() {
@@ -351,90 +327,6 @@
   setInterval(schedule, 200);   // les línies pugen amb el temps, encara que no arribi res nou
   addEventListener('resize', () => { for (const l of Object.values(lanes)) l.resync = true; schedule(); });
 
-  // ─── CARTA ────────────────────────────────────────────────────────────────
-  // El guió es baixa sencer de /guio quan canvia; la posició (frase + fracció llegida) arriba amb cada estat.
-  // La carta llisca sola cap a la posició: la frase que es llegeix queda a l'alçada de lectura.
-  const carta = { rev: undefined, guio: null, key: '', y: null, rq: 0, loading: 0 };
-  async function loadGuio(rev) {
-    carta.rev = rev; carta.key = '';
-    if (!rev) { carta.guio = null; schedule(); return; }
-    const n = ++carta.loading;
-    try { const g = await (await fetch('/guio', { cache: 'no-store' })).json(); if (n === carta.loading) carta.guio = g; }
-    catch { if (n === carta.loading) carta.rev = undefined; } // es torna a provar amb el pròxim estat
-    schedule();
-  }
-  function cartaLangs() {
-    const src = carta.guio?.source;
-    const ls = (cfg.langs || []).slice(0, 3);
-    return (cfg.src && src && !ls.includes(src) ? ['src'] : []).concat(ls);
-  }
-  function buildCarta() {
-    const el = document.getElementById('carta');
-    const g = carta.guio;
-    const ls = cartaLangs();
-    const colors = cfg.colorize && cfg.langColors && typeof cfg.langColors === 'object' ? cfg.langColors : {};
-    const key = JSON.stringify([carta.rev, ls, colors]);
-    if (key === carta.key) return;
-    carta.key = key; carta.y = null;
-    el.innerHTML = '';
-    el.style.setProperty('--cols', String(Math.max(1, ls.length)));
-    if (!g?.segments?.length) return;
-    const lc = (node, L) => { const c = colors[L]; if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) { node.dataset.lc = ''; node.style.setProperty('--lc', c); } };
-    if (ls.length > 1) for (const L of ls) { const h = document.createElement('div'); h.className = 'ch'; h.textContent = L === 'src' ? 'ORIG' : L.toUpperCase(); lc(h, L); el.appendChild(h); }
-    g.segments.forEach((sg, i) => {
-      for (const L of ls) {
-        const d = document.createElement('div');
-        d.className = 'cs' + (L === 'src' ? ' src' : '');
-        d.dataset.i = i;
-        d.textContent = L === 'src' || L === g.source ? sg.src : (sg.tr?.[L] || sg.src);
-        lc(d, L);
-        el.appendChild(d);
-      }
-    });
-  }
-  function renderCarta() {
-    const wrap = document.getElementById('cartaWrap');
-    document.getElementById('stage').classList.add('idle');
-    if (!last) return;
-    buildCarta();
-    const el = document.getElementById('carta');
-    const pos = last.prompter || { i: -1, f: 0 };
-    const has = !!carta.guio?.segments?.length;
-    wrap.classList.toggle('idle', !!cfg.hidden || !has);
-    if (!has) return;
-    const i = Math.max(0, Math.min(carta.guio.segments.length - 1, pos.i));
-    const cells = el.querySelectorAll('.cs');
-    let top = Infinity, bottom = 0;
-    for (const c of cells) {
-      const k = Number(c.dataset.i);
-      c.classList.toggle('read', pos.i >= 0 && k < i);
-      c.classList.toggle('cur', pos.i >= 0 && k === i);
-      if (k === i) { top = Math.min(top, c.offsetTop); bottom = Math.max(bottom, c.offsetTop + c.offsetHeight); }
-    }
-    if (top === Infinity) top = bottom = 0;
-    // Alçada de lectura segons la posició triada (Dalt / Mig / Baix) i, dins de la frase, el tros ja llegit
-    const H = wrap.clientHeight;
-    const readAt = H * (cfg.pos === 'top' ? 0.22 : cfg.pos === 'center' ? 0.4 : 0.55);
-    const f = pos.i < 0 ? 0 : Math.max(0, Math.min(1, Number(pos.f) || 0));
-    const lh = parseFloat(getComputedStyle(cells[0]).lineHeight) || 40;
-    // La frase en curs no baixa mai més de l'última línia: així la línia que es llegeix sempre es veu sencera
-    const target = -(top + Math.max(0, Math.min(bottom - top - lh * 1.3, (bottom - top) * f - lh * 0.6))) + readAt;
-    carta.target = target;
-    if (carta.y == null) { carta.y = target; el.style.transform = `translateY(${target}px)`; }
-    if (!carta.rq) carta.rq = requestAnimationFrame(glide);
-  }
-  // Lliscament suau cap a la posició (seguint la veu, mai a salts)
-  function glide() {
-    carta.rq = 0;
-    if (cfg.view !== 'carta' || carta.y == null) return;
-    const d = carta.target - carta.y;
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    carta.y = Math.abs(d) < 0.5 || reduce ? carta.target : carta.y + d * 0.07;
-    document.getElementById('carta').style.transform = `translateY(${carta.y.toFixed(1)}px)`;
-    if (carta.y !== carta.target) carta.rq = requestAnimationFrame(glide);
-  }
-  addEventListener('resize', () => { carta.key = ''; });
-
   applyCfg(null);
   function connect() {
     const ws = new WebSocket(`ws://${location.host}/ws/pantalla`);
@@ -446,7 +338,6 @@
       lastMsgAt = Date.now();
       offset = msg.now - Date.now();
       if (JSON.stringify(msg.display) !== JSON.stringify(last?.display)) applyCfg(msg.display);
-      if ((msg.guio?.rev || null) !== carta.rev) loadGuio(msg.guio?.rev || null);
       last = msg;
       schedule();
     };

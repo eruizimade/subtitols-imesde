@@ -113,26 +113,6 @@ Amb el text que llegiran, la traducció d'aquelles parts surt molt millor (noms,
 Si el ponent se n'aparta, es tradueix el que diu de debò; si una frase no s'assembla a res del guió,
 funciona com sempre.
 
-## Carta (prompter): el guió sencer baixant mentre es llegeix
-
-Com als programes de traducció simultània: en comptes dels subtítols del que es diu, la pantalla
-ensenya **el guió sencer** (una carta, un parlament) en els idiomes de «Subtítols en», en columnes
-una al costat de l'altra, i **baixa sol a mesura que el ponent el llegeix**. La frase que es llegeix
-queda en blanc a l'alçada de lectura; les llegides i les que vénen, apagades.
-
-1. Cal un **guió carregat** (el mateix de sempre: menú Guió → Carregar guió…).
-2. Panell → **06 Carta** → **Carta** (tornar a **Subtítols** quan s'acabi la lectura).
-3. **seguir la veu** (encès per defecte): la carta avança sola amb el que es transcriu — cal que la
-   sessió estigui en marxa i «Escoltant». Tolera paraules menjades o mal transcrites i frases saltades;
-   no salta enrere per casualitat.
-4. L'operador sempre mana: **clic a una frase** de la llista, **◀ Anterior / Següent ▶**, **Al principi**,
-   o un **comandament de presentacions** (envia Av Pàg / Re Pàg; el panell ha de ser la finestra activa).
-   Si s'apaga «seguir la veu», només avança a mà.
-5. Fons, tipografia, mida, àrea, colors per idioma, «original» i «amagar pantalla» valen igual.
-   **Posició** decideix l'alçada de lectura (Dalt / Mig / Baix).
-
-Per URL (sense panell): `/pantalla?view=carta`.
-
 ## Posar-la en marxa
 
 1. Crea un fitxer `.env` en aquesta carpeta:
