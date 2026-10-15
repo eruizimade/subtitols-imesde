@@ -151,6 +151,8 @@
   .file input[type=file] { display: none; }
   .file .fname { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .muted { color: var(--ink-soft); }
+  .area { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
+  .area input[type=range] { width: 90px; }
   select.fontsel { width: auto; max-width: 240px; padding: 6px 10px; font-size: 13px; font-weight: 600; }
   /* Alarma: s'ha de veure des de l'altra punta de la sala */
   #alarm { position: sticky; top: 0; z-index: 40; display: none; align-items: center; justify-content: center; gap: 14px; padding: 14px 20px; font-size: 20px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; text-align: center; }
@@ -232,7 +234,16 @@
       <div class="toolbar">
         <div class="grp">Fons <div class="seg" id="theme"></div></div>
         <div class="grp">Tipografia <select id="fontSel" class="fontsel"></select><input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2" hidden><button class="btn btn-ghost btn-sm" id="fontDel" hidden title="Esborrar aquesta tipografia d’aquest ordinador">Esborrar</button></div>
+        <div class="grp">Gruix <select id="weightSel" class="fontsel"><option value="">Segons el fons</option><option value="300">Fi</option><option value="400">Normal</option><option value="500">Mitjà</option><option value="600">Seminegreta</option><option value="700">Negreta</option><option value="800">Molt gruixut</option></select></div>
         <div class="grp">Mida <input type="range" id="size" min="2" max="6" step="0.1"></div>
+        <div class="grp" title="On queden els subtítols dins la sortida (en % de l’amplada i l’alçada)">Àrea
+          <span class="area">esq. <input type="range" id="areaL" min="0" max="45" step="0.5"></span>
+          <span class="area">dreta <input type="range" id="areaR" min="0" max="45" step="0.5"></span>
+          <span class="area" id="areaVWrap">vora <input type="range" id="areaV" min="0" max="80" step="0.5"></span>
+          <span class="area" id="areaCWrap">amunt/avall <input type="range" id="areaC" min="-45" max="45" step="0.5"></span>
+          <button class="btn btn-ghost btn-sm" id="areaReset">Per defecte</button>
+        </div>
+        <label class="switch" title="Dibuixa a la sortida el requadre que ocupen els subtítols, per encaixar-lo al muntatge (recorda apagar-ho abans de l’acte)"><input type="checkbox" id="areaGuide"><span></span><b>marcar l’àrea a la sortida</b></label>
         <div class="grp">Línies <div class="seg" id="lines"></div></div>
         <div class="grp">Posició <div class="seg" id="pos"></div></div>
         <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
@@ -736,6 +747,26 @@ $('fontDel').onclick = async () => {
   await fetch('/fonts/' + encodeURIComponent(v.slice(7)), { method: 'DELETE' }).catch(() => {});
   prefs.display.font = 'sans'; saveDisplay(); toast('Tipografia esborrada');
 };
+// ─── Àrea dels subtítols dins la sortida ───
+const AREA_DEF = { l: 5, r: 5, v: 6, c: 0 };
+function renderArea() {
+  const a = { ...AREA_DEF, ...(prefs.display.area || {}) };
+  for (const k of ['l', 'r', 'v', 'c']) $('area' + k.toUpperCase()).value = a[k];
+  const mid = prefs.display.pos === 'center';
+  $('areaVWrap').hidden = mid; $('areaCWrap').hidden = !mid;
+  $('areaV').parentElement.firstChild.textContent = prefs.display.pos === 'top' ? 'dalt ' : 'baix ';
+}
+for (const k of ['l', 'r', 'v', 'c']) $('area' + k.toUpperCase()).oninput = () => {
+  prefs.display.area = { ...AREA_DEF, ...(prefs.display.area || {}), [k]: Number($('area' + k.toUpperCase()).value) }; saveDisplay();
+};
+$('areaReset').onclick = () => { prefs.display.area = { ...AREA_DEF }; renderArea(); saveDisplay(); };
+prefs.display.guide = false; // la guia mai queda encesa d'una sessió a l'altra
+$('areaGuide').checked = false;
+$('areaGuide').onchange = () => { prefs.display.guide = $('areaGuide').checked; saveDisplay(); toast(prefs.display.guide ? 'Àrea marcada a la sortida: apaga-ho abans de l’acte' : 'Guia de l’àrea apagada'); };
+document.getElementById('pos').addEventListener('click', () => setTimeout(renderArea, 0));
+renderArea();
+$('weightSel').value = String(prefs.display.weight || '');
+$('weightSel').onchange = () => { prefs.display.weight = $('weightSel').value ? Number($('weightSel').value) : null; saveDisplay(); };
 function syncHideBtn() { const on = $('hideScreen').checked; $('hideBtn').classList.toggle('on', on); $('hideBtn').textContent = on ? 'Pantalla AMAGADA' : 'Pantalla visible'; }
 $('hideScreen').onchange = () => { prefs.display.hidden = $('hideScreen').checked; sendDisplay(); syncHideBtn(); toast(prefs.display.hidden ? 'Pantalla AMAGADA' : 'Pantalla visible'); };
 $('hideBtn').onclick = () => { $('hideScreen').checked = !$('hideScreen').checked; $('hideScreen').onchange(); };
