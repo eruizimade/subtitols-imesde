@@ -264,7 +264,10 @@
   function renderNow() {
     if (!last) return;
     const now = Date.now() + offset;
-    const all = last.blocks || [];
+    // «Netejar pantalla» del panell: fora tot el que havia començat abans (també la frase a mitges)
+    const clearAt = Number(last.screenClearAt) || 0;
+    if (clearAt > resetAt) resetAt = clearAt;
+    const all = (last.blocks || []).filter((b) => b.t0 >= clearAt);
     // Sense notícies del servidor fa >6 s (s'ha aturat, ha caigut, Wi-Fi): una frase a mitges NO es pot
     // quedar congelada a la pantalla per sempre → s'esvaeix com si s'hagués acabat
     const stale = !connected || Date.now() - lastMsgAt > 6000;

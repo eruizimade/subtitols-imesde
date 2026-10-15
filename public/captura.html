@@ -61,6 +61,10 @@
   header .btn-green { box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 8px 24px rgba(188,225,42,.25); }
   header .btn-stop { background: var(--cream); color: var(--ink); }
   header .btn-stop.armed { background: var(--red); color: #fff; }
+  .listen { min-width: 150px; font-weight: 700; background: var(--red, #d64545); color: #fff; }
+  .listen.on { background: var(--green); color: var(--ink); }
+  .listen.off-run { animation: listenBlink 1.2s ease-in-out infinite; }
+  @keyframes listenBlink { 50% { opacity: .55; } }
   .btn-hide { padding: 13px 20px; font-size: 14.5px; font-weight: 600; background: transparent; color: var(--cream); border: 1px solid rgba(244,243,239,.35); min-width: 170px; }
   .btn-hide:hover { border-color: var(--cream); }
   .btn-hide.on { background: #ffb547; color: var(--ink); border-color: #ffb547; font-weight: 700; }
@@ -230,7 +234,7 @@
 
   <div class="col">
     <section class="card">
-      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
+      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><button class="btn btn-sm listen on" id="listenBtn" title="Apaga-ho quan no s’ha de subtitular (música, parlament en un altre idioma, assaig): no s’escolta res, però tot segueix en marxa">● Escoltant</button> <button class="btn btn-ghost btn-sm" id="clearScreen" title="Treu de la pantalla tot el text que hi ha ara">Netejar pantalla</button> <button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
       <div class="preview"><iframe id="pv" src="/pantalla?embed=1"></iframe></div>
       <div class="toolbar">
         <div class="grp">Fons <div class="seg" id="theme"></div></div>
@@ -352,6 +356,7 @@ function onState(s) {
   if (s.bootId) lastBoot = s.bootId;
   if (s.running) { stoppedBySelf = false; stoppedAlarm = 0; }
   lastState = s;
+  syncListen(s);
   if (s.native?.active) {
     if (s.native.lastAt) lastFrameAt = performance.now() - Math.max(0, s.now - s.native.lastAt);
     const lv = s.native.levels || [];
@@ -795,6 +800,19 @@ document.getElementById('pos').addEventListener('click', () => setTimeout(render
 renderArea();
 $('weightSel').value = String(prefs.display.weight || '');
 $('weightSel').onchange = () => { prefs.display.weight = $('weightSel').value ? Number($('weightSel').value) : null; saveDisplay(); };
+// ─── Escoltar / no escoltar i netejar la pantalla (decisions de l'operador, al costat de la previsualització) ───
+function syncListen(s) {
+  const on = s?.listening !== false;
+  $('listenBtn').classList.toggle('on', on);
+  $('listenBtn').classList.toggle('off-run', !on && !!s?.running);
+  $('listenBtn').textContent = on ? '● Escoltant' : '○ NO ESCOLTA';
+}
+$('listenBtn').onclick = () => {
+  const on = !(lastState?.listening !== false);
+  send({ type: 'listen', on });
+  toast(on ? 'Escoltant: el que es digui sortirà a la pantalla' : 'No escolta: no sortirà res nou fins que el tornis a encendre');
+};
+$('clearScreen').onclick = () => { send({ type: 'clearScreen' }); toast('Pantalla neta'); };
 function syncHideBtn() { const on = $('hideScreen').checked; $('hideBtn').classList.toggle('on', on); $('hideBtn').textContent = on ? 'Pantalla AMAGADA' : 'Pantalla visible'; }
 $('hideScreen').onchange = () => { prefs.display.hidden = $('hideScreen').checked; sendDisplay(); syncHideBtn(); toast(prefs.display.hidden ? 'Pantalla AMAGADA' : 'Pantalla visible'); };
 $('hideBtn').onclick = () => { $('hideScreen').checked = !$('hideScreen').checked; $('hideScreen').onchange(); };

@@ -63,6 +63,8 @@ const LANG_NAMES = { ca: 'català', es: 'castellà', en: 'anglès', fr: 'francè
 
 // ─── Estat ──────────────────────────────────────────────────────────────────
 const state = {
+  listening: true, // «No escolta»: l'àudio s'envia com a silenci (la sessió segueix viva i no salta cap alarma)
+  screenClearAt: 0, // «Netejar pantalla»: la pantalla del públic deixa anar tot el text d'abans d'aquest moment
   running: false,
   startedAt: null,
   audioMs: 0,
@@ -110,6 +112,8 @@ function broadcast() {
       operators: operators.size,
       hasOwner: !!audioOwner,
       startedAt: state.startedAt,
+      listening: state.listening,
+      screenClearAt: state.screenClearAt,
       audioSeconds: Math.round(state.audioMs / 1000),
       config: state.config,
       display: state.display,
@@ -525,6 +529,7 @@ function start(cfg) {
   stop();
   Object.assign(state.config, sanitizeConfig(cfg));
   state.running = true;
+  state.listening = true;
   state.startedAt = Date.now();
   state.audioMs = 0;
   state.usage = { calls: 0, aborted: 0, input: 0, cached: 0, output: 0, estInput: 0 };
@@ -585,7 +590,8 @@ function onAudio(buf, from) {
   if (state.running && !audioOwner && operators.has(from) && !native.status.active) { audioOwner = from; noOperatorSince = 0; broadcast(); }
   if (!state.running || buf.length < 3 || from !== audioOwner) return;
   const sp = buf[0];
-  const pcm = buf.subarray(1);
+  // Sense escoltar: silenci del mateix llarg (la sessió, els rellotges i les pauses segueixen igual)
+  const pcm = state.listening ? buf.subarray(1) : Buffer.alloc(buf.length - 1);
   const now = Date.now();
   const last = speakerTimeline[speakerTimeline.length - 1];
   if (!last || last.s !== sp) speakerTimeline.push({ t: now, s: sp });
@@ -813,7 +819,9 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'start') { audioOwner = ws; start(msg.config); }
     else if (msg.type === 'claim') { if (state.running && !native.status.active) { audioOwner = ws; noOperatorSince = 0; broadcast(); } }
     else if (msg.type === 'stop') stop();
-    else if (msg.type === 'clear') { blocks = []; open = null; broadcast(); }
+    else if (msg.type === 'clear') { blocks = []; open = null; state.screenClearAt = Date.now(); broadcast(); }
+    else if (msg.type === 'clearScreen') { state.screenClearAt = Date.now(); broadcast(); }
+    else if (msg.type === 'listen') { state.listening = !!msg.on; log({ kind: 'escolta', on: state.listening }); broadcast(); }
     else if (msg.type === 'config') {
       const before = JSON.stringify([state.config.mode, state.config.sourceLang, state.config.prompt, state.config.speakerLangs]);
       const wasInput = JSON.stringify(state.config.input || null);
