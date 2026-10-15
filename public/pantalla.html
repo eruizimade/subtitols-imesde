@@ -186,6 +186,30 @@
     document.fonts?.load(`40px "${fam}"`).then(() => { for (const l of Object.values(lanes)) l.resync = true; schedule?.(); }).catch(() => {});
   }
 
+  // ─── El que ja es llegeix no es reescriu ─────────────────────────────────
+  // La traducció definitiva d'una frase en reescrivia el principi mentre el públic ja el llegia (a l'assaig del
+  // 15/10, 10 de 22 frases). Ara: les paraules que ja es veuen es queden i el text nou s'hi ENCAIXA al darrere
+  // (es busca on continua). Si la frase nova diu una altra cosa del tot, mana la nova: millor un canvi que
+  // perdre o repetir paraules. Una paraula a mig arribar («sto») sí que es completa («story»).
+  const ALIEN_SCRIPT = /[\u0590-\u08FF\u0400-\u04FF\u0370-\u03FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F]/;
+  const nw = (w) => String(w).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]/gu, '');
+  function keepShown(shown, words) {
+    const r = shown.length;
+    if (!r) return words;
+    let same = true;
+    for (let i = 0; i < r && same; i++) { const a = nw(shown[i]), b = nw(words[i] || ''); if (a !== b && !(i === r - 1 && b.startsWith(a))) same = false; }
+    if (same) return words; // només s'allarga (o es completa l'última paraula, o canvia la puntuació)
+    // Només s'encaixa si la major part del que ja es veu també és a la frase nova; si no, diu una altra cosa
+    // (comptant només paraules amb contingut: «the», «we», «de» hi són sempre i no diuen res)
+    const inNew = new Set(words.map(nw));
+    const content = shown.filter((w) => nw(w).length > 3);
+    if (!content.length || content.filter((w) => inNew.has(nw(w))).length < Math.ceil(content.length * 0.6)) return words;
+    const last = nw(shown[r - 1]);
+    for (let d = 0; d <= 3; d++) for (const j of d ? [r - 1 + d, r - 1 - d] : [r - 1]) if (j >= 0 && j < words.length && nw(words[j]) === last) return shown.concat(words.slice(j + 1));
+    const near = new Set(words.slice(0, r + 2).map(nw));
+    if (shown.filter((w) => near.has(nw(w))).length >= Math.ceil(r * 0.6)) return shown.concat(words.slice(r));
+    return words;
+  }
   const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
   // Quin idioma va a la fila i per a aquesta frase: el que diu la taula per a l'idioma que s'hi parla
@@ -230,6 +254,8 @@
     const lastId = blocks.length ? blocks[blocks.length - 1].id : null;
     for (const b of blocks) {
       // Una «paraula» llarguíssima (una adreça, text sense espais) es parteix: si no, es tallaria a la vora
+      // Al·lucinacions en un alfabet que no és cap dels de l'acte (soroll o música transcrits en hebreu, xinès…): fora
+      if (!b.literal && ALIEN_SCRIPT.test(b.src || '')) continue;
       const words = get(b).trim().split(/\s+/).filter(Boolean).flatMap((w) => (w.length > 24 ? w.match(/.{1,20}/gu) : [w]));
       if (!words.length) continue;
       // Suau: cada frase comença en una línia nova (si una frase es reescriu, només es mouen les SEVES línies)
@@ -240,9 +266,10 @@
       // Paraules ja ensenyades: NOMÉS es protegeixen si la frase nova té el MATEIX nombre de paraules (canvi
       // d'una per una altra: és el que feia saltar la línia sense que es perdés res). Si en té més o menys, mana
       // la traducció nova: protegir-les desquadrava les posicions i es perdien o repetien paraules (2.2.0–2.4.0).
-      let ex = 0; while (lane.spans.has(`${b.id}:${ex}`)) ex++;
-      const lock = words.length === ex;
-      words.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0, lock }));
+      const shown = [];
+      for (let i = 0; ; i++) { const sp = lane.spans.get(`${b.id}:${i}`); if (!sp || !lane.revealed?.has(sp)) break; shown.push(sp.textContent); }
+      const final = keepShown(shown, words);
+      final.forEach((w, i) => want.push({ key: `${b.id}:${i}`, w, old: b.id !== lastId, brk: brk && i === 0 }));
     }
 
     // 2. Reconcilia amb el que ja hi ha (sense refer el DOM: així no salta res)
@@ -262,8 +289,7 @@
         span._space = document.createTextNode(' ');
         span._br = document.createElement('br');
         lane.spans.set(x.key, span);
-      } else if (span.textContent !== x.w && !(x.lock && lane.revealed?.has(span) && !x.w.startsWith(span.textContent))) {
-        // (una paraula sí que es pot COMPLETAR: la traducció arriba a trossos i «sto» ha de poder ser «story»)
+      } else if (span.textContent !== x.w) {
         // Una paraula que ja s'ha ensenyat no es reescriu: la traducció final d'OpenAI tornava a escriure
         // paraules que el públic ja havia llegit i la línia creixia, decreixia i saltava (els dos moviments)
         span.textContent = x.w;

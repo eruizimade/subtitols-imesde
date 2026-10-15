@@ -243,9 +243,9 @@ function guioMatch(text) {
 
 // ─── Traducció en streaming ─────────────────────────────────────────────────
 // La xarxa falla de tant en tant («fetch failed»): es reintenta dues vegades abans de rendir-se
-async function streamTranslate(text, lang, onText, signal, final = false, srcLang = null) {
+async function streamTranslate(text, lang, onText, signal, final = false, srcLang = null, cont = null) {
   for (let intent = 0; ; intent++) {
-    try { return await streamTranslateOnce(text, lang, onText, signal, final, srcLang); }
+    try { return await streamTranslateOnce(text, lang, onText, signal, final, srcLang, cont); }
     catch (e) {
       // Un 4xx és definitiu (clau, model, petició mal feta) TRET del 429 (límit de ritme) i el 408:
       // amb un acte de molta parla, un 429 deixava la frase traduïda a mitges per sempre
@@ -260,7 +260,7 @@ async function streamTranslate(text, lang, onText, signal, final = false, srcLan
   }
 }
 
-async function streamTranslateOnce(text, lang, onText, signal, final = false, srcLang = null) {
+async function streamTranslateOnce(text, lang, onText, signal, final = false, srcLang = null, cont = null) {
   const context = blocks.filter((b) => b.final && b.src && b.src.trim() !== text.trim()).slice(-3).map((b) => b.src).join(' ');
   const m = guioMatch(text);
   if (m && final) guioPos = m.i;
@@ -288,6 +288,10 @@ async function streamTranslateOnce(text, lang, onText, signal, final = false, sr
             'El text pot estar a mitja frase: no el completis ni hi afegeixis res. Respon NOMÉS amb la traducció, sense cometes.' +
             (srcLang ? `\nQui parla s'expressa habitualment en ${LANG_NAMES[srcLang]} (si aquest tros és en una altra llengua, tradueix-lo igualment).` : '') +
             (state.config.prompt ? `\nInformació de l'acte: ${state.config.prompt}` : '') +
+            // Una pausa havia partit la frase: aquest tros en és la continuació, i traduït sol quedava forçat
+            (cont ? `\nAQUEST FRAGMENT CONTINUA LA FRASE ANTERIOR, que una pausa ha tallat: «${cont.src}»` +
+              (cont.tr ? ` (ja traduïda i a la pantalla com «${cont.tr}»)` : '') +
+              '. Tradueix NOMÉS aquest fragment, de manera que llegit just darrere d\'aquella traducció formi una frase natural. No repeteixis res del tros anterior.' : '') +
             (context ? `\nEl que s'acaba de dir (context, no ho tradueixis): ${context}` : '') +
             (ref ? `\nAquest fragment és, probablement, part del GUIÓ escrit de l'acte. Aquí tens el tros del guió i la seva traducció aprovada:\n${ref}\n` +
               'Fes servir la traducció aprovada per a les parts que el ponent diu igual que al guió (mateixes paraules i noms). ' +
@@ -353,6 +357,9 @@ function translateBlock(block) {
   // Idioma del que s'ha dit: el fixat a «Es parla en» quan va començar la frase o, si no, el del ponent.
   // A l'idioma que ja és el de l'original no es tradueix: surt tal qual.
   const srcL = block.srcLang && block.srcLang !== 'auto' ? block.srcLang : block.lang || null;
+  // La frase anterior s'ha tallat per una pausa (no acaba en punt) i aquesta l'ha seguida de seguida: n'és la continuació
+  const bi = blocks.indexOf(block), prevB = bi > 0 ? blocks[bi - 1] : null;
+  const isCont = prevB && prevB.final && !prevB.hidden && prevB.src && !/[.!?…]["»”)]?\s*$/.test(prevB.src) && block.t0 - prevB.tEnd < 4000;
   // Tots els idiomes que poden sortir a la pantalla: els «Subtítols en» i els de la taula per idioma parlat
   const langs = [...new Set([...state.config.targets, ...Object.values(state.config.showMap || {}).flat()])];
   for (const lang of langs) {
@@ -370,7 +377,7 @@ function translateBlock(block) {
         if (seq !== block.seq[lang]) return;
         if (first && out) { first = false; state.latency.translate = smooth(state.latency.translate, Date.now() - t); }
         if (acceptTranslation(block.tr[lang] || '', out, { done, final })) { block.tr[lang] = out.trim(); broadcast(); }
-      }, ctrl.signal, final, srcL)
+      }, ctrl.signal, final, srcL, isCont ? { src: prevB.src, tr: prevB.tr?.[lang] || '' } : null)
         .catch((e) => { if (e.name !== 'AbortError') pushError(`traducció ${lang}`, e); })
         .finally(() => { if (block.jobs[lang] === ctrl) block.jobs[lang] = null; }),
     );
