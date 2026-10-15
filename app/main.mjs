@@ -36,13 +36,16 @@ if (process.env.SUBTITOLS_FAKE_AUDIO) {
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
   app.commandLine.appendSwitch('use-file-for-fake-audio-capture', process.env.SUBTITOLS_FAKE_AUDIO);
-  app.commandLine.appendSwitch('disable-features', 'AudioServiceSandbox,AudioServiceOutOfProcess');
 }
 if (process.env.SUBTITOLS_DEBUG_PORT) app.commandLine.appendSwitch('remote-debugging-port', process.env.SUBTITOLS_DEBUG_PORT);
 // Que Chrome no alenteixi res en segon pla: el panell ha de seguir enviant àudio encara que no es vegi
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+// macOS diu «tapada» d'una finestra que és en un altre escriptori o darrere una app a pantalla completa, i
+// Chromium deixa de pintar-la: la pantalla del públic quedava congelada si no es veia el panell
+app.commandLine.appendSwitch('disable-features', ['CalculateNativeWinOcclusion',
+  ...(process.env.SUBTITOLS_FAKE_AUDIO ? ['AudioServiceSandbox', 'AudioServiceOutOfProcess'] : [])].join(','));
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -481,6 +484,7 @@ app.whenReady().then(async () => {
     quitting = true; app.quit(); return;
   }
   powerSaveBlocker.start('prevent-display-sleep');
+  powerSaveBlocker.start('prevent-app-suspension');
   server = startServer();
   if (!(await waitServer())) log('✖ el servidor triga a respondre: s’obre igualment el panell (es reconnecta sol)');
   createPanel();

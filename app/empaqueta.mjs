@@ -33,9 +33,20 @@ const [out] = await packager({
   extendInfo: {
     NSMicrophoneUsageDescription: 'Subtítols IMESDE escolta la taula de so per transcriure i traduir el que es diu.',
     LSApplicationCategoryType: 'public.app-category.productivity',
+    // Sense App Nap: amb la finestra del panell amagada, macOS adormia l'app i la 2a pantalla es quedava quieta
+    NSAppSleepDisabled: true, LSAppNapIsDisabled: true,
   },
 });
 const app = path.join(out, 'Subtítols IMESDE.app');
+// El mateix als processos auxiliars (servidor, panell, pantalla): cadascun té el seu Info.plist i macOS
+// els pot adormir per separat
+const fw = path.join(app, 'Contents', 'Frameworks');
+for (const h of fs.readdirSync(fw).filter((n) => n.endsWith('.app'))) {
+  const plist = path.join(fw, h, 'Contents', 'Info.plist');
+  for (const k of ['NSAppSleepDisabled', 'LSAppNapIsDisabled']) {
+    try { execFileSync('plutil', ['-replace', k, '-bool', 'YES', plist]); } catch {}
+  }
+}
 // Signatura ad hoc (Apple Silicon no obre res sense signar; en canviar el nom, la d'Electron ja no val)
 execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'inherit' });
 console.log(`\n✓ ${app}`);
