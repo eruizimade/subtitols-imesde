@@ -57,7 +57,7 @@ llengua li arriba traduït a l'anglès, i el que es digui en anglès li arriba t
 L'adreça és sempre la mateixa.
 
 1. Un administrador genera a preview.imesde.app una **clau d'emissió** (un sol cop).
-2. S'enganxa a la targeta 07 → «Desar la clau». El panell ensenya l'adreça pública (clic per copiar-la).
+2. S'enganxa a la targeta 07 → «Desar la clau». El panell ensenya l'adreça pública (clic per copiar-la) i el seu codi QR (clic per fer-lo gros i que l'escanegin des de la pantalla).
 3. «emetre a l'enllaç» encès i l'idioma triat. Emet mentre hi ha sessió; «Pantalla AMAGADA» i «No escolta»
    també el fan callar. A la tira de salut hi surt **Enllaç** (verd = emetent, vermell = no arriba a imesde.app).
 

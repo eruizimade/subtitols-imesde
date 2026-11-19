@@ -966,7 +966,7 @@ function handleFonts(req, res, url) {
   res.writeHead(405); res.end();
 }
 
-const FILES = { '/': 'captura.html', '/captura': 'captura.html', '/pantalla': 'pantalla.html', '/pcm-worklet.js': 'pcm-worklet.js' };
+const FILES = { '/': 'captura.html', '/captura': 'captura.html', '/pantalla': 'pantalla.html', '/pcm-worklet.js': 'pcm-worklet.js', '/qr.js': 'qr.js' };
 // El PANELL (i el seu canal de control) només des d'aquest mateix ordinador: qualsevol de la xarxa del recinte
 // que endevinés l'adreça podia obrir-lo i prémer «Aturar». La pantalla del públic sí que es pot obrir des de
 // qualsevol ordinador de la xarxa. PANELL_REMOT=1 al .env ho torna a permetre (p. ex. per manar-lo des d'un altre Mac).
