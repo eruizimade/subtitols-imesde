@@ -892,7 +892,10 @@ function linkPayload(lang) {
 }
 const link = createLink({
   dataDir: DATA_DIR,
-  baseUrl: (process.env.ENLLAC_URL || 'https://www.imesde.app').replace(/\/+$/, ''),
+  // De moment, l'entorn de PROVES de l'agenda (preview.imesde.app): s'hi pot canviar i pujar sense tocar
+  // producció. Quan passi a producció: https://www.imesde.app (amb «www»: imesde.app redirigeix i, en una
+  // redirecció a un altre domini, la clau no viatja).
+  baseUrl: (process.env.ENLLAC_URL || 'https://preview.imesde.app').replace(/\/+$/, ''),
   bootId: BOOT_ID,
   langs: Object.keys(LANG_NAMES),
   payload: linkPayload,

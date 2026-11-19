@@ -26,7 +26,11 @@ imesde.app no s'hi connecta mai.
 
 ## API de imesde.app (la que fa servir l'emissor)
 
-Base: `https://www.imesde.app` (l'emissor la pot canviar amb `ENLLAC_URL`, per a proves i per al preview).
+Base: de moment **`https://preview.imesde.app`** (l'entorn de proves de l'agenda: s'hi pot canviar i pujar
+sense tocar producció); quan passi a producció, `https://www.imesde.app`. L'emissor la pot canviar amb
+`ENLLAC_URL`. El `url` que torna el `GET` surt de l'origen de la petició, o sigui que ara les adreces públiques
+són `https://preview.imesde.app/subtitolsXXXXXXXX`. Les claus generades a preview no tenen per què valdre a
+producció.
 Totes dues amb `Authorization: Bearer <clau>`.
 
 ### `GET /api/subtitols/feed` — «qui soc?»

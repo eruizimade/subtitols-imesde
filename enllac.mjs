@@ -26,7 +26,10 @@ export function createLink({ dataDir, baseUrl, bootId, langs, payload, onStatus,
   } catch { /* encara no n'hi ha */ }
 
   // state: 'off' (sense clau o apagat) · 'ready' (a punt, sense sessió) · 'ok' (emetent) · 'error'
-  const status = { configured: false, on: false, lang: cfg.lang, url: '', state: 'off', error: null, lastOkAt: 0, viewers: null };
+  let host = 'imesde.app';
+  try { host = new URL(baseUrl).host.replace(/^www\./, ''); } catch {}
+  // host: on s'envia (imesde.app o, de moment, preview.imesde.app); el panell el diu als seus textos
+  const status = { configured: false, on: false, lang: cfg.lang, url: '', host, state: 'off', error: null, lastOkAt: 0, viewers: null };
   let seq = 0, lastSig = '', lastSentAt = 0, inFlight = false, timer = null, fails = 0, retryAt = 0, wasLive = false;
 
   const save = () => {
@@ -44,7 +47,7 @@ export function createLink({ dataDir, baseUrl, bootId, langs, payload, onStatus,
     else if (status.state === 'off') setState('ready');
     onStatus();
   }
-  const why = (e) => (e?.auth || e?.http ? e.message : 'no es pot arribar a imesde.app (hi ha internet?)');
+  const why = (e) => (e?.auth || e?.http ? e.message : `no es pot arribar a ${host} (hi ha internet?)`);
 
   function call(method, body, key = cfg.clau) {
     return fetch(baseUrl + '/api/subtitols/feed', {
@@ -53,7 +56,7 @@ export function createLink({ dataDir, baseUrl, bootId, langs, payload, onStatus,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   }
-  const httpError = (r) => Object.assign(new Error(r.status === 401 ? 'imesde.app no reconeix aquesta clau' : `imesde.app respon ${r.status}`), { http: true, auth: r.status === 401 });
+  const httpError = (r) => Object.assign(new Error(r.status === 401 ? `${host} no reconeix aquesta clau` : `${host} respon ${r.status}`), { http: true, auth: r.status === 401 });
 
   // Comprova una clau i en desa l'adreça pública. No canvia res si la clau no val.
   async function setKey(clau) {
@@ -63,7 +66,7 @@ export function createLink({ dataDir, baseUrl, bootId, langs, payload, onStatus,
       const r = await call('GET', undefined, clau);
       if (!r.ok) throw httpError(r);
       const j = await r.json();
-      if (typeof j?.url !== 'string' || !/^https?:\/\/\S+$/.test(j.url)) throw Object.assign(new Error('imesde.app ha respost una cosa inesperada'), { http: true });
+      if (typeof j?.url !== 'string' || !/^https?:\/\/\S+$/.test(j.url)) throw Object.assign(new Error(`${host} ha respost una cosa inesperada`), { http: true });
       Object.assign(cfg, { clau, url: j.url, token: typeof j.token === 'string' ? j.token : '' });
       lastSig = ''; fails = 0; retryAt = 0;
       save(); sync(); touch();

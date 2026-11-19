@@ -49,11 +49,12 @@ La captura multicanal nativa, a més, demana `npm run nadiu` (cal tenir les eine
 
 ## Enllaç públic (seguir-ho des de fora, en un idioma)
 
-Targeta **«07 Enllaç públic»** del panell. Algú obre `https://imesde.app/subtitolsXXXXXXXX` (al mòbil, des de
+Targeta **«07 Enllaç públic»** del panell. Algú obre `https://preview.imesde.app/subtitolsXXXXXXXX` (de moment
+a l'entorn de proves de l'agenda; més endavant, a `imesde.app`) (al mòbil, des de
 casa, des d'una cabina) i hi llegeix els subtítols **en l'idioma que tries al panell per a aquell enllaç**,
 encara que aquell idioma no surti a la pantalla de la sala. L'adreça és sempre la mateixa.
 
-1. Un administrador genera a imesde.app una **clau d'emissió** (un sol cop).
+1. Un administrador genera a preview.imesde.app una **clau d'emissió** (un sol cop).
 2. S'enganxa a la targeta 07 → «Desar la clau». El panell ensenya l'adreça pública (clic per copiar-la).
 3. «emetre a l'enllaç» encès i l'idioma triat. Emet mentre hi ha sessió; «Pantalla AMAGADA» i «No escolta»
    també el fan callar. A la tira de salut hi surt **Enllaç** (verd = emetent, vermell = no arriba a imesde.app).
@@ -209,7 +210,7 @@ COMMIT_PAUSE_MS=600            # pausa que tanca un tros cap a OpenAI (0 = no)
 GUIO=altre.json                # un altre fitxer de guió
 PORT=4321
 PANELL_REMOT=1                 # deixa obrir el panell des d'un altre ordinador de la xarxa
-ENLLAC_URL=https://…           # on s'envia l'enllaç públic (per defecte https://www.imesde.app)
+ENLLAC_URL=https://…           # on s'envia l'enllaç públic (per defecte https://preview.imesde.app)
 ```
 
 ## Registre

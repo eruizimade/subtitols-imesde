@@ -305,7 +305,7 @@
     <section class="card" id="linkCard" hidden>
       <h2 class="kicker"><span class="n">07</span> Enllaç públic <span class="right" id="linkState"></span></h2>
       <div id="linkSetup">
-        <p class="hint" style="margin:0 0 14px">Perquè algú segueixi els subtítols des de fora (amb el mòbil, des de casa, des d’una cabina), en el seu idioma, a <b>imesde.app/subtitols…</b> Cal una <b>clau d’emissió</b>: la genera un administrador a imesde.app i s’enganxa aquí un sol cop.</p>
+        <p class="hint" style="margin:0 0 14px">Perquè algú segueixi els subtítols des de fora (amb el mòbil, des de casa, des d’una cabina), en el seu idioma, a <b><span class="lhost">imesde.app</span>/subtitols…</b> Cal una <b>clau d’emissió</b>: la genera un administrador a <span class="lhost">imesde.app</span> i s’enganxa aquí un sol cop.</p>
         <label class="f">Clau d’emissió <input type="text" id="linkKey" autocomplete="off" spellcheck="false" placeholder="Enganxa-la aquí"></label>
         <button class="btn btn-ghost btn-sm" id="linkSave">Desar la clau</button>
       </div>
@@ -1061,6 +1061,7 @@ function syncLink(s) {
   const sig = JSON.stringify([L, s.config?.targets, s.running]);
   if (sig === linkSig) return;
   linkSig = sig;
+  if (L.host) for (const el of document.querySelectorAll('.lhost')) el.textContent = L.host;
   $('linkSetup').hidden = L.configured;
   $('linkReady').hidden = !L.configured;
   $('linkOn').checked = !!L.on;
