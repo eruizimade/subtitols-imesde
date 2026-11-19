@@ -58,6 +58,11 @@ if (!API_KEY) {
   process.exit(1);
 }
 
+// A l'app la clau viu al Clauer (no hi ha cap .env): on es canvia ho diu el panell
+const KEY_BAD = 'La clau d’OpenAI no és vàlida';
+// Només proves (proves/simulador.mjs): un OpenAI de mentida en aquest ordinador. Mai en un ús normal.
+const OPENAI_WS = process.env.OPENAI_WS_URL || 'wss://api.openai.com/v1/realtime?intent=transcription';
+const OPENAI_HTTP = process.env.OPENAI_HTTP_URL || 'https://api.openai.com';
 const BOOT_ID = Date.now().toString(36);
 const CODE_VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(DIR, 'package.json'), 'utf8')).version; } catch { return '?'; } })(); // el panell sap si el servidor s'ha reiniciat
 const LANG_NAMES = { ca: 'català', es: 'castellà', en: 'anglès', fr: 'francès', it: 'italià', de: 'alemany', pt: 'portuguès' };
@@ -111,6 +116,8 @@ function broadcast() {
       type: 'state',
       running: state.running,
       operators: operators.size,
+      // Pantalles del públic connectades de debò (la vista prèvia del panell no compta)
+      screens: [...displays].filter((d) => !d.embed && d.readyState === WebSocket.OPEN).length,
       hasOwner: !!audioOwner,
       startedAt: state.startedAt,
       listening: state.listening,
@@ -266,7 +273,7 @@ async function streamTranslateOnce(text, lang, onText, signal, final = false, sr
   if (m && final) guioPos = m.i;
   const ref = m ? m.segs.filter((s) => s.tr?.[lang]).map((s) => `«${s.src}» → «${s.tr[lang]}»`).join('\n') : '';
   const promptChars = 600 + text.length + context.length + ref.length + (state.config.prompt || '').length; // ~600 = instruccions
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch(OPENAI_HTTP + '/v1/chat/completions', {
     method: 'POST',
     // Una traducció penjada (xarxa del recinte) no pot quedar-se la llengua 5 minuts: als 10 s es talla
     // i es reintenta (el TimeoutError no és un AbortError, o sigui que entra al reintent)
@@ -314,7 +321,8 @@ async function streamTranslateOnce(text, lang, onText, signal, final = false, sr
     buf = lines.pop();
     for (const l of lines) {
       if (!l.startsWith('data: {')) continue;
-      const j = JSON.parse(l.slice(6));
+      let j;
+      try { j = JSON.parse(l.slice(6)); } catch { continue; } // una línia a mitges no pot tombar tota la traducció
       if (j.usage) {
         state.usage.calls++;
         state.usage.input += j.usage.prompt_tokens || 0;
@@ -495,7 +503,7 @@ const recentAudio = []; // els últims ~8 s enviats: si la sessió s'encalla, es
 let quietMs = 0, uncommitted = false;   // àudio rebut mentre la sessió es connecta (missatges ja preparats)
 let sttFailures = 0;     // connexions fallides seguides → espera creixent
 function openStt() {
-  const ws = new WebSocket('wss://api.openai.com/v1/realtime?intent=transcription', {
+  const ws = new WebSocket(OPENAI_WS, {
     headers: { Authorization: `Bearer ${API_KEY}` },
     // Sense això, una connexió que es penja a mig establir (xarxa del recinte) es quedava
     // «connectant» per sempre: ni es tancava ni la reconnectava cap vigilant
@@ -537,7 +545,10 @@ function openStt() {
     broadcast();
     console.log(`● transcripció connectada (${transcription.model}${transcription.delay ? ' · ' + transcription.delay : ''})`);
   });
+  ws.lastRx = Date.now(); ws.pongs = 0;
+  ws.on('pong', () => { ws.lastRx = Date.now(); if (!ws.pongs++) console.log('  · OpenAI respon als senyals de vida: es vigila la connexió'); });
   ws.on('message', (raw) => {
+    ws.lastRx = Date.now();
     if (ws !== upstream && ws !== retiring) return; // una sessió ja substituïda no pot barrejar text amb la nova
     let ev;
     try { ev = JSON.parse(raw.toString()); } catch { return; }
@@ -559,14 +570,21 @@ function openStt() {
     else if (ev.type === 'error') pushError('transcripció', ev.error || ev);
   });
   // Un error d'una sessió que ja hem tancat a posta (stop, renovació) no és cap avaria
-  ws.on('error', (e) => (ws === upstream ? pushError('connexió', e) : console.error('· sessió vella:', e.message)));
+  ws.on('error', (e) => {
+    if (ws !== upstream) return console.error('· sessió vella:', e.message);
+    // OpenAI refusa la connexió mateixa (clau revocada o canviada): que el panell ho digui clar. Es continua
+    // reintentant; si torna a anar, «session.updated» treu l'avís.
+    // (només el 401: un 403 també el pot tornar el portal captiu o el tallafoc de la xarxa del recinte)
+    if (/Unexpected server response: 401/.test(e?.message || '')) state.fatal = KEY_BAD;
+    pushError('connexió', e);
+  });
   ws.on('close', (code, reason) => {
     clearTimeout(ws.confirmTimer);
     if (upstream !== ws) return;
     if (open) finalize(open); // la frase a mitges no s'ha de quedar penjada esperant una sessió nova
     console.log(`○ transcripció tancada (${code} ${reason})`);
     if (/invalid_api_key|insufficient_quota|model_not_found|permission/.test(String(reason))) {
-      state.fatal = /invalid_api_key/.test(String(reason)) ? 'La clau d’OpenAI no és vàlida (revisa el .env)'
+      state.fatal = /invalid_api_key/.test(String(reason)) ? KEY_BAD
         : /insufficient_quota/.test(String(reason)) ? 'El compte d’OpenAI no té saldo'
         : `OpenAI ha refusat la sessió (${reason})`;
       return pushError('OpenAI', `no es reconnecta (${reason})`);
@@ -616,9 +634,17 @@ function start(cfg) {
   // Res de la sessió anterior (un assaig) no pot entrar a la nova
   voicedMs = 0; quietMs = 0; uncommitted = false; recentAudio.length = 0; lastRestart = Date.now(); guioPos = -1;
   clearTimeout(configRotateT); pendingCfgRotate = 0;
+  try { fs.mkdirSync(path.join(DATA_DIR, 'sessions'), { recursive: true }); } catch {} // si algú l'ha esborrada amb l'app oberta
   logFile = path.join(DATA_DIR, 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
   log({ kind: 'inici', ...state.config, TRANSLATE_MODEL });
-  wav = openWav(logFile.replace(/\.jsonl$/, '.wav'));
+  // L'enregistrament és un extra: si no es pot obrir (disc ple, carpeta esborrada), la sessió comença igualment.
+  // Abans, un error aquí deixava la sessió «en marxa» però sense connexió amb OpenAI.
+  wav = null;
+  try {
+    const free = freeBytes();
+    if (free != null && free < MIN_FREE_WAV) pushError('enregistrament', `queda poc espai al disc (${(free / 1e9).toFixed(1)} GB): no es desa l’àudio d’aquesta sessió`);
+    else wav = openWav(logFile.replace(/\.jsonl$/, '.wav'));
+  } catch (e) { pushError('enregistrament', e); }
   lastSpeech = Date.now();
   upstream = openStt();
   applyInput();
@@ -683,7 +709,10 @@ function onAudio(buf, from) {
   else quietMs += (n / 24000) * 1000;
   if (wav) {
     // Desar l'àudio és un extra: si el disc falla, es deixa de desar però els subtítols segueixen
-    try { fs.writeSync(wav.fd, pcm); wav.bytes += pcm.length; }
+    try {
+      fs.writeSync(wav.fd, pcm); wav.bytes += pcm.length;
+      if (wav.bytes - wav.headerAt >= 480000) writeWavHeader(); // cada ~10 s
+    }
     catch (e) { pushError('enregistrament', e); closeWav(); }
   }
   const msg = JSON.stringify({ type: 'input_audio_buffer.append', audio: pcm.toString('base64') });
@@ -698,22 +727,33 @@ function onAudio(buf, from) {
   }
 }
 
+// Espai lliure al disc de les dades (null si no es pot saber)
+const MIN_FREE_WAV = Number(process.env.MIN_FREE_GB || 1) * 1e9;
+function freeBytes() {
+  try { const st = fs.statfsSync(DATA_DIR); return Number(st.bavail) * Number(st.bsize); } catch { return null; }
+}
+
 function openWav(file) {
   const fd = fs.openSync(file, 'w');
   fs.writeSync(fd, Buffer.alloc(44));
-  return { fd, bytes: 0, file };
+  return { fd, bytes: 0, file, headerAt: 0 };
 }
-function closeWav() {
-  if (!wav) return;
-  try {
+// La capçalera es reescriu cada ~10 s (i en tancar): si el servidor cau o el Mac s'apaga a mitja sessió,
+// l'enregistrament es pot obrir igualment (abans quedava amb la capçalera en blanc i no el llegia res).
+// Escriure a la posició 0 no mou el punt on se segueix afegint l'àudio.
+function writeWavHeader() {
   const h = Buffer.alloc(44);
   h.write('RIFF', 0); h.writeUInt32LE(36 + wav.bytes, 4); h.write('WAVE', 8);
   h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
   h.writeUInt32LE(24000, 24); h.writeUInt32LE(48000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
   h.write('data', 36); h.writeUInt32LE(wav.bytes, 40);
   fs.writeSync(wav.fd, h, 0, 44, 0);
-  fs.closeSync(wav.fd);
-  } catch (e) { console.error('✖ wav:', e.message); }
+  wav.headerAt = wav.bytes;
+}
+function closeWav() {
+  if (!wav) return;
+  try { writeWavHeader(); } catch (e) { console.error('✖ wav:', e.message); }
+  try { fs.closeSync(wav.fd); } catch (e) { console.error('✖ wav:', e.message); }
   wav = null;
 }
 
@@ -752,9 +792,12 @@ setInterval(() => {
   log({ kind: 'reconnexio', voicedMs });
   // El que s'ha dit mentre estava encallada no s'ha transcrit: es torna a enviar a la sessió nova
   // (arriba uns segons tard, però arriba). Com a molt el que ha durat l'encallada, i 8 s.
-  const since = Math.max(lastSpeech, now - 8000) - 500;
+  restartStt(Math.max(lastSpeech, now - 8000) - 500);
+}, 1000);
+// Substitueix la sessió per una de nova i hi torna a enviar l'àudio recent (des de «since»)
+function restartStt(since) {
   const replay = recentAudio.filter((x) => x.t >= since).map((x) => x.msg);
-  lastRestart = now;
+  lastRestart = Date.now();
   voicedMs = 0;
   if (open) finalize(open);
   const old = upstream;
@@ -762,7 +805,33 @@ setInterval(() => {
   pendingAudio = replay.concat(pendingAudio).slice(-300);
   uncommitted = true;
   try { old.close(); } catch {}
-}, 1000);
+  broadcast();
+}
+
+// Connexió MORTA sense tancar-se (Wi-Fi del recinte que es penja, router que perd la sortida): el socket
+// segueix «obert» i, si ningú no parla, res no ho detectava: el panell deia que tot anava bé i, en tornar la
+// veu, el vigilant d'encallades encara trigava 6 s a adonar-se'n. Ara s'envia un senyal de vida cada 5 s;
+// si en 15 s no torna RES (ni text ni resposta), la sessió es refà i el panell avisa si no hi ha internet.
+// Només s'aplica si aquesta connexió ha respost algun senyal: si OpenAI no en respongués mai, no fa res.
+const DEAD_MS = Number(process.env.DEAD_MS || 15000);
+let deadTick = Date.now();
+setInterval(() => {
+  // Si aquest mateix rellotge arriba tard (el Mac s'havia adormit, el procés estava aturat), el silenci no és
+  // culpa de la connexió: aquesta volta només es torna a preguntar, no es jutja
+  const late = Date.now() - deadTick > 8000;
+  deadTick = Date.now();
+  const ws = upstream;
+  if (!state.running || !ws || ws.readyState !== WebSocket.OPEN) return;
+  if (late) { ws.lastRx = Date.now(); try { ws.ping(); } catch {} return; }
+  if (ws.pongs && Date.now() - ws.lastRx > DEAD_MS) {
+    console.log(`↻ la connexió amb OpenAI no respon (fa ${Math.round((Date.now() - ws.lastRx) / 1000)} s): es refà`);
+    log({ kind: 'reconnexio', mort: Date.now() - ws.lastRx });
+    restartStt(Date.now() - 8000);
+    try { ws.terminate(); } catch {} // no cal esperar el comiat d'un socket mort
+    return;
+  }
+  try { ws.ping(); } catch {}
+}, 5000);
 
 // Renovació de la sessió: OpenAI talla cada sessió als 60 minuts. En lloc d'esperar el tall (que pot
 // caure a mitja frase), es renova a partir dels 50 minuts aprofitant una pausa, i als 57 sí o sí.
@@ -793,7 +862,8 @@ setInterval(() => {
 
 // Panells que ja no responen (Wi-Fi penjada sense tancar): fora, perquè no es quedin l'àudio
 setInterval(() => {
-  for (const c of operators) {
+  // …i les pantalles també (una pantalla en un altre ordinador amb la Wi-Fi penjada es quedava a la llista)
+  for (const c of [...operators, ...displays]) {
     if (c.isAlive === false) { try { c.terminate(); } catch {} continue; }
     c.isAlive = false;
     try { c.ping(); } catch {}
@@ -821,7 +891,12 @@ function refreshFonts() {
   try { fontList = fs.readdirSync(FONTS_DIR).filter((f) => FONT_NAME.test(f)).sort(); } catch { fontList = []; }
 }
 refreshFonts();
-const isLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+// Aquest mateix ordinador: per localhost o per qualsevol de les seves pròpies adreces de xarxa
+const isLocal = (req) => {
+  const a = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  if (a === '127.0.0.1' || a === '::1') return true;
+  try { return Object.values(os.networkInterfaces()).flat().some((i) => i && i.address === a); } catch { return false; }
+};
 // Que sigui de debò una tipografia (capçalera del fitxer), no qualsevol cosa amb l'extensió canviada
 function looksLikeFont(buf) {
   const sig = buf.subarray(0, 4).toString('latin1');
@@ -831,8 +906,7 @@ function handleFonts(req, res, url) {
   const name = decodeURIComponent(url.pathname.slice('/fonts/'.length));
   if (req.method === 'GET') {
     if (!FONT_NAME.test(name) || !fontList.includes(name)) { res.writeHead(404); return res.end('no'); }
-    res.writeHead(200, { 'Content-Type': FONT_TYPES[name.split('.').pop().toLowerCase()], 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
-    return fs.createReadStream(path.join(FONTS_DIR, name)).pipe(res);
+    return sendFile(res, path.join(FONTS_DIR, name), { 'Content-Type': FONT_TYPES[name.split('.').pop().toLowerCase()], 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
   }
   if (!isLocal(req)) { res.writeHead(403); return res.end('només des d’aquest ordinador'); }
   if (req.method === 'DELETE') {
@@ -860,8 +934,29 @@ function handleFonts(req, res, url) {
 }
 
 const FILES = { '/': 'captura.html', '/captura': 'captura.html', '/pantalla': 'pantalla.html', '/pcm-worklet.js': 'pcm-worklet.js' };
+// El PANELL (i el seu canal de control) només des d'aquest mateix ordinador: qualsevol de la xarxa del recinte
+// que endevinés l'adreça podia obrir-lo i prémer «Aturar». La pantalla del públic sí que es pot obrir des de
+// qualsevol ordinador de la xarxa. PANELL_REMOT=1 al .env ho torna a permetre (p. ex. per manar-lo des d'un altre Mac).
+const REMOTE_PANEL = /^(1|si|sí|true)$/i.test(process.env.PANELL_REMOT || '');
+const sendFile = (res, file, headers) => {
+  const st = fs.createReadStream(file);
+  st.on('error', () => { if (!res.headersSent) res.writeHead(404); res.end(); });
+  st.once('open', () => res.writeHead(200, headers));
+  st.pipe(res);
+};
 const server = http.createServer((req, res) => {
+  try { handleHttp(req, res); }
+  catch (e) { // una adreça mal formada (p. ex. «%» solt) no pot deixar la petició penjada
+    try { if (!res.headersSent) res.writeHead(400); res.end('petició no vàlida'); } catch {}
+  }
+});
+function handleHttp(req, res) {
   const url = new URL(req.url, 'http://x');
+  if (!REMOTE_PANEL && !isLocal(req) && (url.pathname === '/' || url.pathname === '/captura')) {
+    if (url.pathname === '/') { res.writeHead(302, { Location: '/pantalla' }); return res.end(); }
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('El panell de control només s’obre des de l’ordinador on corre el servidor. La pantalla del públic és a /pantalla');
+  }
   if (url.pathname === '/info') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ running: state.running, version: CODE_VERSION, lan: lanUrls(), modes: Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.label])), models: { TRANSLATE_MODEL } }));
@@ -874,20 +969,35 @@ const server = http.createServer((req, res) => {
   const file = brand ? `brand/${brand[1]}` : FILES[url.pathname];
   if (!file || !fs.existsSync(path.join(DIR, 'public', file))) { res.writeHead(404); return res.end('no'); }
   const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8';
-  res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
-  fs.createReadStream(path.join(DIR, 'public', file)).pipe(res);
-});
+  sendFile(res, path.join(DIR, 'public', file), { 'Content-Type': type, 'Cache-Control': 'no-store' });
+}
 
 let configRotateT = null;
 let pendingCfgRotate = 0;
 const wss = new WebSocketServer({ server });
+const refusedAt = new Map();
 wss.on('connection', (ws, req) => {
-  const isOperator = new URL(req.url, 'http://x').pathname === '/ws/captura';
+  ws.on('error', (e) => console.error('✖ client local:', e.message)); // sense això, una trama dolenta feia caure el servidor
+  let wsUrl;
+  try { wsUrl = new URL(req.url, 'http://x'); } catch { return ws.close(1008, 'adreça'); }
+  const isOperator = wsUrl.pathname === '/ws/captura';
+  // Una pàgina web QUALSEVOL oberta en aquest ordinador podia connectar-se a ws://localhost i aturar la sessió:
+  // el navegador sempre diu de quina pàgina ve (Origin) i ha de ser una d'aquest servidor. Els programes de
+  // prova (proves/*.mjs) no envien Origin i passen.
+  const origin = req.headers.origin;
+  let sameOrigin = true;
+  if (origin) { try { sameOrigin = new URL(origin).host === req.headers.host; } catch { sameOrigin = false; } }
+  if (!sameOrigin || (isOperator && !REMOTE_PANEL && !isLocal(req))) {
+    // (un panell obert en un altre ordinador ho torna a provar cada segon: una línia per minut i adreça, no seixanta)
+    const who = `${isOperator ? 'panell' : 'pantalla'} de ${req.socket.remoteAddress}${origin ? ' · ' + origin : ''}`;
+    if (Date.now() - (refusedAt.get(who) || 0) > 60000) { if (refusedAt.size > 200) refusedAt.clear(); refusedAt.set(who, Date.now()); console.error(`✖ connexió refusada (${who})`); }
+    return ws.close(1008, 'no permès');
+  }
+  ws.embed = wsUrl.searchParams.has('embed'); // la vista prèvia del panell: no compta com a pantalla del públic
   (isOperator ? operators : displays).add(ws);
   broadcast();
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
-  ws.on('error', (e) => console.error('✖ client local:', e.message)); // sense això, una trama dolenta feia caure el servidor
   ws.on('message', (data, isBinary) => {
     if (!isOperator) return;
     if (isBinary) return onAudio(Buffer.from(data), ws);
@@ -914,7 +1024,7 @@ wss.on('connection', (ws, req) => {
       }
       broadcast();
     }
-    else if (msg.type === 'display') { state.display = msg.display; broadcast(); }
+    else if (msg.type === 'display') { if (msg.display && typeof msg.display === 'object' && data.length < 20000) state.display = msg.display; broadcast(); }
     else if (msg.type === 'literal') {
       if (typeof msg.on === 'boolean' && msg.on !== literal.on) {
         literal.on = msg.on;
@@ -929,18 +1039,18 @@ wss.on('connection', (ws, req) => {
       broadcast();
     }
   });
-  ws.on('close', () => { operators.delete(ws); displays.delete(ws); if (ws === audioOwner) audioOwner = null; });
+  ws.on('close', () => { operators.delete(ws); displays.delete(ws); if (ws === audioOwner) audioOwner = null; broadcast(); });
 });
 
 // Comprovació en engegar: millor saber ARA que la clau no va que no pas en començar l'acte
 async function checkKey() {
   try {
-    const r = await fetch('https://api.openai.com/v1/models/' + TRANSLATE_MODEL, { headers: { Authorization: `Bearer ${API_KEY}` }, signal: AbortSignal.timeout(8000) });
+    const r = await fetch(OPENAI_HTTP + '/v1/models/' + TRANSLATE_MODEL, { headers: { Authorization: `Bearer ${API_KEY}` }, signal: AbortSignal.timeout(8000) });
     if (r.ok) { console.log('  ✓ Clau d’OpenAI vàlida\n'); state.fatal = null; }
     else {
       const t = (await r.text()).slice(0, 160);
       // Només una clau refusada és definitiva; un 429/5xx en arrencar és passatger
-      if (r.status === 401 || r.status === 403) state.fatal = 'La clau d’OpenAI no és vàlida (revisa el .env)';
+      if (r.status === 401 || r.status === 403) state.fatal = KEY_BAD;
       console.error(`\n  ✖✖ OpenAI respon ${r.status}: ${t}\n`);
     }
   } catch (e) { console.error(`\n  ✖ No es pot arribar a OpenAI (${e.message}): hi ha internet? Es torna a provar en 30 s\n`); setTimeout(checkKey, 30000); }

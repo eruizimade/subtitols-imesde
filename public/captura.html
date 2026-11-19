@@ -6,7 +6,8 @@
 <title>Subtítols · Imesde</title>
 <link rel="icon" href="/brand/icon-green.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&display=swap" rel="stylesheet">
+<!-- media="print" + onload: no bloqueja. Abans, sense internet (o amb la xarxa del recinte lenta) el panell es quedava en blanc fins que el navegador es rendia -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <script>try { if (JSON.parse(localStorage.getItem('sub.panelDark'))) document.documentElement.classList.add('dark'); } catch {}</script>
 <style>
   :root {
@@ -66,6 +67,20 @@
   .live .status { background: var(--green); color: var(--ink); }
   .live .status i { background: var(--ink); box-shadow: 0 0 0 0 rgba(43,43,43,.6); animation: ring 1.6s infinite; }
   @keyframes ring { to { box-shadow: 0 0 0 8px rgba(43,43,43,0); } }
+
+  /* Cadena de salut: d'un cop d'ull, on s'ha trencat (entrada → OpenAI → traducció → pantalla) */
+  .chain { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px 26px; align-items: center; padding: 9px clamp(20px, 3vw, 40px) 11px; border-top: 1px solid rgba(244,243,239,.1); font-size: 13px; color: rgba(244,243,239,.62); font-variant-numeric: tabular-nums; }
+  .hc { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .hc b { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(244,243,239,.88); }
+  .hc i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: rgba(244,243,239,.28); }
+  .hc.ok i { background: var(--green); }
+  .hc.warn i { background: #ffb547; }
+  .hc.bad i { background: var(--red); box-shadow: 0 0 0 3px rgba(229,72,77,.35); }
+  .hc.warn span, .hc.bad span { color: #fff; font-weight: 600; }
+  .hc.push { margin-left: auto; }
+  .chain { padding-right: 150px; background: inherit; } /* fons propi: en finestres estretes els cercles de marca baixaven per darrere del text */
+  @media (max-width: 1100px) { .chain { padding-right: clamp(20px, 3vw, 40px); } .hc.push { margin-left: 0; } }
+  :focus-visible { outline: 2px solid var(--green-deep); outline-offset: 2px; }
 
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 999px; font-weight: 600; letter-spacing: .01em; cursor: pointer; border: 1px solid transparent; padding: 11px 22px; font-size: 14.5px; transition: transform .25s, box-shadow .25s, background .25s, border-color .25s, color .25s; white-space: nowrap; }
   .btn:disabled { opacity: .45; cursor: default; transform: none !important; box-shadow: none !important; }
@@ -153,7 +168,13 @@
   /* La vista prèvia, no més alta del 40% de la finestra: si no, se'n menjava la transcripció */
   .preview { position: relative; aspect-ratio: 16 / 9; width: min(100%, calc(40vh * 16 / 9)); margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
   .preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin-top: 16px; }
+  /* Controls de directe (idioma que es parla, escoltar, netejar): junts i a mà, sobre la vista prèvia */
+  .live-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: -4px 0 14px; }
+  /* Ajustos de la pantalla, agrupats per què fan (abans eren vint controls seguits en una sola tira) */
+  .toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); gap: 12px; margin-top: 16px; }
+  .tg { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; align-content: flex-start; min-width: 0; margin: 0; padding: 8px 14px 14px; border: 1px solid var(--line); border-radius: 12px; }
+  .tg legend { padding: 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--green-ink); }
+  .toolbar output { min-width: 2.4em; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .toolbar .grp { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
   input[type=range] { accent-color: var(--green-deep); width: 110px; }
   .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-soft); user-select: none; }
@@ -204,7 +225,7 @@
 </style>
 </head>
 <body>
-<div id="alarm"></div>
+<div id="alarm" role="alert"></div>
 <div id="litBar" hidden><b>LECTURA LITERAL</b><span id="litTxt"></span><button class="btn" id="litPrev" title="Torna a ensenyar la frase anterior">◀</button><button class="btn" id="litNext" title="Passa a la frase següent">▶</button></div>
 <header id="hdr">
   <div class="bar">
@@ -214,12 +235,18 @@
     <div class="stats">
       <span class="status"><i></i><span id="statusTxt">Aturat</span></span>
       <div class="stat"><b id="timer">0:00</b><span>temps</span></div>
-      <div class="stat"><b id="lat">—</b><span>traducció</span></div>
       <button class="btn btn-theme" id="themeBtn" title="Mode fosc / clar del panell (no canvia la pantalla del públic)">◐</button>
       <button class="btn btn-lit" id="litBtn" title="Quan es llegeix el guió paraula per paraula (la carta): a la pantalla surt la traducció OFICIAL de cada frase, seguint la veu. Apaga-ho quan s’acabi la lectura">Lectura literal</button>
       <button class="btn btn-hide" id="hideBtn" title="Durant la música o el descans: al públic no li surt res">Pantalla visible</button>
       <button class="btn btn-green btn-big" id="go">Començar →</button>
     </div>
+  </div>
+  <div class="chain" id="chain">
+    <span class="hc" id="hcIn" title="L’àudio que entra (targeta o micròfon)"><i></i><b>Entrada</b><span>—</span></span>
+    <span class="hc" id="hcAi" title="La connexió amb OpenAI, que fa la transcripció"><i></i><b>OpenAI</b><span>—</span></span>
+    <span class="hc" id="hcTr" title="Quant triga a sortir la primera paraula de cada traducció"><i></i><b>Traducció</b><span>—</span></span>
+    <span class="hc" id="hcScr" title="Pantalles del públic connectades ara mateix (la vista prèvia d’aquest panell no compta)"><i></i><b>Pantalla</b><span>—</span></span>
+    <span class="hc push" id="hcTxt" title="Quant fa que s’ha transcrit l’última paraula"><i></i><b>Últim text</b><span>—</span></span>
   </div>
 </header>
 
@@ -277,41 +304,52 @@
 
   <div class="col">
     <section class="card">
-      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><span class="seg" id="quickSrc" title="Idioma que es parla ara. Canvia-ho quan el ponent canviï d'idioma (s'aplica a la pausa, o en 3 s)"></span> <button class="btn btn-sm listen on" id="listenBtn" title="Apaga-ho quan no s’ha de subtitular (música, parlament en un altre idioma, assaig): no s’escolta res, però tot segueix en marxa">● Escoltant</button> <button class="btn btn-ghost btn-sm" id="clearScreen" title="Treu de la pantalla tot el text que hi ha ara">Netejar pantalla</button> <button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
-      <div class="preview"><iframe id="pv" src="/pantalla?embed=1"></iframe></div>
+      <h2 class="kicker"><span class="n">05</span> Pantalla <span class="right"><button class="btn btn-green btn-sm" id="openDisplay">Obrir pantalla ↗</button></span></h2>
+      <div class="live-row">
+        <span class="seg" id="quickSrc" title="Idioma que es parla ara. Canvia-ho quan el ponent canviï d'idioma (s'aplica a la pausa, o en 3 s)"></span>
+        <button class="btn btn-sm listen on" id="listenBtn" title="Apaga-ho quan no s’ha de subtitular (música, parlament en un altre idioma, assaig): no s’escolta res, però tot segueix en marxa">● Escoltant</button>
+        <button class="btn btn-ghost btn-sm" id="clearScreen" title="Treu de la pantalla del públic tot el text que hi ha ara (la transcripció de sota es queda)">Netejar pantalla</button>
+      </div>
+      <div class="preview"><iframe id="pv" src="/pantalla?embed=1" title="Vista prèvia de la pantalla del públic"></iframe></div>
       <div class="toolbar">
-        <div class="grp">Fons <div class="seg" id="theme"></div></div>
-        <div class="grp">Tipografia <select id="fontSel" class="fontsel"></select><input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2" hidden><button class="btn btn-ghost btn-sm" id="fontDel" hidden title="Esborrar aquesta tipografia d’aquest ordinador">Esborrar</button></div>
-        <div class="grp">Gruix <select id="weightSel" class="fontsel"><option value="">Segons el fons</option><option value="300">Fi</option><option value="400">Normal</option><option value="500">Mitjà</option><option value="600">Seminegreta</option><option value="700">Negreta</option><option value="800">Molt gruixut</option></select></div>
-        <div class="grp">Mida <input type="range" id="size" min="2" max="6" step="0.1"></div>
-        <div class="grp" title="On queden els subtítols dins la sortida (en % de l’amplada i l’alçada)">Àrea
-          <span class="area">esq. <input type="range" id="areaL" min="0" max="45" step="0.5"></span>
-          <span class="area">dreta <input type="range" id="areaR" min="0" max="45" step="0.5"></span>
-          <span class="area">dalt <input type="range" id="areaT" min="0" max="80" step="0.5"></span>
-          <span class="area">baix <input type="range" id="areaB" min="0" max="80" step="0.5"></span>
+        <fieldset class="tg"><legend>Aspecte</legend>
+          <div class="grp">Fons <div class="seg" id="theme"></div></div>
+          <div class="grp">Tipografia <select id="fontSel" class="fontsel"></select><input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2" hidden><button class="btn btn-ghost btn-sm" id="fontDel" hidden title="Esborrar aquesta tipografia d’aquest ordinador">Esborrar</button></div>
+          <div class="grp">Gruix <select id="weightSel" class="fontsel"><option value="">Segons el fons</option><option value="300">Fi</option><option value="400">Normal</option><option value="500">Mitjà</option><option value="600">Seminegreta</option><option value="700">Negreta</option><option value="800">Molt gruixut</option></select></div>
+          <div class="grp">Mida <input type="range" id="size" min="2" max="6" step="0.1"></div>
+          <label class="switch" title="Cada idioma amb el seu color (mana sobre el del fons)"><input type="checkbox" id="colorize"><span></span>colors per idioma</label>
+          <span class="area" id="langColors"></span>
+        </fieldset>
+        <fieldset class="tg"><legend>Text</legend>
+          <div class="grp">Línies <div class="seg" id="lines"></div></div>
+          <div class="grp">Posició <div class="seg" id="pos"></div></div>
+          <label class="switch"><input type="checkbox" id="center"><span></span>centrat</label>
+          <div class="grp" title="Espai entre un idioma i el següent">Separació <input type="range" id="rowGap" min="0.5" max="10" step="0.1"></div>
+          <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
+          <div class="grp" title="Com es mou el text. Clàssic: línia a línia (el de sempre). Per frase: cada frase sencera i quieta, com un subtítol de cinema, fins que en comença una altra. Suau: les paraules entren una a una i el bloc puja lliscant. Es canvia en calent, sense reiniciar">Moviment <div class="seg" id="motion"></div></div>
+        </fieldset>
+        <fieldset class="tg"><legend>Què es veu</legend>
+          <label class="switch"><input type="checkbox" id="showSrc"><span></span>original</label>
+          <label class="switch"><input type="checkbox" id="showSpeaker"><span></span>ponent</label>
+          <label class="switch" title="Les marques EN / ES al costat de cada llengua"><input type="checkbox" id="showTags"><span></span>indicadors d’idioma (EN/ES)</label>
+          <label class="switch" title="Durant la música o el descans: la pantalla queda en blanc encara que el sistema escriba alguna cosa"><input type="checkbox" id="hideScreen"><span></span><b>amagar pantalla</b></label>
+        </fieldset>
+        <fieldset class="tg" title="On queden els subtítols dins la sortida (en % de l’amplada i l’alçada)"><legend>Àrea i sortida</legend>
+          <span class="area">esq. <input type="range" id="areaL" min="0" max="45" step="0.5" data-u="%"></span>
+          <span class="area">dreta <input type="range" id="areaR" min="0" max="45" step="0.5" data-u="%"></span>
+          <span class="area">dalt <input type="range" id="areaT" min="0" max="80" step="0.5" data-u="%"></span>
+          <span class="area">baix <input type="range" id="areaB" min="0" max="80" step="0.5" data-u="%"></span>
           <button class="btn btn-ghost btn-sm" id="areaReset">Per defecte</button>
-        </div>
-        <label class="switch" title="Dibuixa a la sortida el requadre que ocupen els subtítols, per encaixar-lo al muntatge (recorda apagar-ho abans de l’acte)"><input type="checkbox" id="areaGuide"><span></span><b>marcar l’àrea a la sortida</b></label>
-        <div class="grp" title="Espai entre un idioma i el següent">Separació <input type="range" id="rowGap" min="0.5" max="10" step="0.1"></div>
-        <label class="switch" title="Cada idioma amb el seu color (mana sobre el del fons)"><input type="checkbox" id="colorize"><span></span>colors per idioma</label>
-        <span class="area" id="langColors"></span>
-        <div class="grp">Línies <div class="seg" id="lines"></div></div>
-        <div class="grp">Posició <div class="seg" id="pos"></div></div>
-        <div class="grp" title="Temps mínim que es queda cada línia a la vista abans de pujar">Lectura <div class="seg" id="dwell"></div></div>
-        <div class="grp" title="Com es mou el text. Clàssic: línia a línia (el de sempre). Per frase: cada frase sencera i quieta, com un subtítol de cinema, fins que en comença una altra. Suau: les paraules entren una a una i el bloc puja lliscant. Es canvia en calent, sense reiniciar">Moviment <div class="seg" id="motion"></div></div>
-        <label class="switch"><input type="checkbox" id="showSrc"><span></span>original</label>
-        <label class="switch"><input type="checkbox" id="showSpeaker"><span></span>ponent</label>
-        <label class="switch" title="Les marques EN / ES al costat de cada llengua"><input type="checkbox" id="showTags"><span></span>indicadors d’idioma (EN/ES)</label>
-        <label class="switch"><input type="checkbox" id="center"><span></span>centrat</label>
-        <label class="switch" title="Durant la música o el descans: la pantalla queda en blanc encara que el sistema escriba alguna cosa"><input type="checkbox" id="hideScreen"><span></span><b>amagar pantalla</b></label>
-        <label class="switch" title="Si hi ha una segona pantalla (HDMI, projector), la pantalla del públic s’hi obre sola a pantalla completa"><input type="checkbox" id="autoScreen"><span></span>obrir sola a la 2a pantalla</label>
+          <label class="switch" title="Dibuixa a la sortida el requadre que ocupen els subtítols, per encaixar-lo al muntatge (recorda apagar-ho abans de l’acte)"><input type="checkbox" id="areaGuide"><span></span><b>marcar l’àrea a la sortida</b></label>
+          <label class="switch" title="Si hi ha una segona pantalla (HDMI, projector), la pantalla del públic s’hi obre sola a pantalla completa"><input type="checkbox" id="autoScreen"><span></span>obrir sola a la 2a pantalla</label>
+        </fieldset>
       </div>
       <div class="urls" id="urls"></div>
     </section>
 
     <section class="card">
       <h2 class="kicker"><span class="n">06</span> Transcripció
-        <span class="right"><button class="btn btn-ghost btn-sm" id="clear">Netejar pantalla</button> <button class="btn btn-ghost btn-sm" id="download">Descarregar .txt</button></span>
+        <span class="right"><button class="btn btn-ghost btn-sm" id="clear" title="Buida aquesta llista i també neteja la pantalla del públic. El registre de la sessió (sessions/) no es toca">Buidar la llista</button> <button class="btn btn-ghost btn-sm" id="download">Descarregar .txt</button></span>
       </h2>
       <div class="log" id="log"><div class="nolog"><div class="rings"></div>Quan comencis, aquí hi sortirà tot el que es digui i les traduccions.</div></div>
     </section>
@@ -319,7 +357,7 @@
 </main>
 <div class="errors" id="errors"></div>
 <div class="toasts" id="toasts"></div>
-<div id="multi" hidden style="position:fixed;left:50%;top:104px;transform:translateX(-50%);z-index:30;background:#bce12a;color:#2b2b2b;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.2)"></div>
+<div id="multi" hidden style="position:fixed;left:50%;top:146px;transform:translateX(-50%);z-index:30;background:#bce12a;color:#2b2b2b;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.2)"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -420,7 +458,7 @@ function onState(s) {
   if (s.display && typeof s.display.hidden === 'boolean' && $('hideScreen').checked !== s.display.hidden) { $('hideScreen').checked = s.display.hidden; prefs.display.hidden = s.display.hidden; syncHideBtn(); }
   running = s.running;
   startedAt = s.startedAt;
-  if (s.startedAt && s.startedAt !== lastStart) { lastStart = s.startedAt; blocks.clear(); }
+  if (s.startedAt && s.startedAt !== lastStart) { lastStart = s.startedAt; blocks.clear(); logSig = ''; }
   $('hdr').classList.toggle('live', running);
   // Sessió en marxa però sense cap panell emetent (p. ex. s'ha recarregat la pàgina): es pot reprendre
   orphan = running && !s.hasOwner && !sending;
@@ -437,10 +475,7 @@ function onState(s) {
   $('multi').textContent = `Tens ${s.operators} panells de captura oberts. Només n’emet un: tanca els altres.`;
   $('guioInfo').textContent = s.guio ? `Guió carregat: ${s.guio.from} · ${s.guio.n} frases` : 'Sense guió (vegeu LLEGEIX-ME)';
   // El cost no es mostra a posta: el panell el pot veure el client (queda als registres de sessions/)
-  $('lat').textContent = s.latency?.translate != null ? (s.latency.translate / 1000).toFixed(1).replace('.', ',') + ' s' : '—';
   for (const b of s.blocks || []) blocks.set(b.id, b);
-  if (!(s.blocks || []).length && !running) { /* netejat */ }
-  if (s.cleared) blocks.clear();
   renderLog();
   $('errors').innerHTML = (s.errors || []).slice(-3).map((e) => `<div>${esc(e)}</div>`).join('');
 }
@@ -452,8 +487,8 @@ function health() {
   if (lastState?.upstream && lastState.upstream !== 'open' && lastState.running) upstreamDownSince ||= now; else upstreamDownSince = 0;
   const textAgo = lastState?.lastText ? (lastState.now - lastState.lastText) / 1000 : 0;
   let red = '', amber = '';
-  if (!connected && now - pageLoadedAt > 3000) red = 'Servidor desconnectat <small>Mira el Terminal on corre el servidor. Es reconnecta sol.</small>';
-  else if (lastState?.fatal) red = esc(lastState.fatal) + ' <small>Sense això no surt cap subtítol</small>';
+  if (!connected && now - pageLoadedAt > 3000) red = 'Servidor desconnectat <small>Es torna a engegar i a connectar sol. Si dura, tanca i obre l’app (o mira el Terminal on corre).</small>';
+  else if (lastState?.fatal) red = esc(lastState.fatal) + (/clau/i.test(lastState.fatal) ? ' <small>Sense això no surt cap subtítol. Es canvia al menú de l’app → «Canviar la clau d’OpenAI…» (o al .env si corre en un Terminal)</small>' : ' <small>Sense això no surt cap subtítol</small>');
   else if (stoppedAlarm) red = 'La sessió s’ha aturat <small>Prem «Començar» per tornar-hi</small>';
   else if (sending && !isNative() && ctx?.state && ctx.state !== 'running') red = 'Àudio aturat pel navegador <small>Clica en qualsevol lloc de la pàgina</small>';
   else if (sending && lastState?.native?.active && lastState.native.error) red = 'La targeta multicanal no envia àudio <small>' + esc(lastState.native.error) + '</small>';
@@ -467,23 +502,67 @@ function health() {
   const html = red || amber;
   if (el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; }
 }
-setInterval(health, 500);
+// ─── Cadena de salut (sota la capçalera): entrada → OpenAI → traducció → pantalla ───
+// No substitueix l'alarma: l'alarma crida quan cal fer alguna cosa; això diu, en calma, com està cada tram.
+function chip(id, cls, txt) {
+  const el = $(id), c = 'hc' + (cls ? ' ' + cls : '') + (id === 'hcTxt' ? ' push' : '');
+  if (el.className !== c) el.className = c;
+  if (el.lastElementChild.textContent !== txt) el.lastElementChild.textContent = txt;
+}
+function chain() {
+  const s = lastState, now = Date.now();
+  const frames = lastFrameAt && performance.now() - lastFrameAt < 1500;
+  if (running && s && !s.hasOwner) chip('hcIn', 'warn', 'cap panell envia àudio');
+  else if (running && !sending) chip('hcIn', 'ok', 'l’envia un altre panell');
+  else if (sending && s?.listening === false) chip('hcIn', 'warn', 'NO ESCOLTA');
+  else if (sending) chip('hcIn', frames ? 'ok' : now - sendingSince > 2500 ? 'bad' : 'warn', frames ? 'arriba àudio' : now - sendingSince > 2500 ? 'no arriba àudio' : 'obrint…');
+  else chip('hcIn', frames ? 'ok' : '', frames ? 'a punt' : isNative() && nativeInfo() ? 'multicanal a punt' : 'sense activar');
+
+  if (!connected || !s) chip('hcAi', connected ? '' : 'bad', connected ? '—' : 'sense servidor');
+  else if (s.fatal) chip('hcAi', 'bad', 'refusat');
+  else if (!running) chip('hcAi', '', 'en espera');
+  else chip('hcAi', s.upstream === 'open' ? 'ok' : s.upstream === 'connecting' ? 'warn' : 'bad', s.upstream === 'open' ? 'connectat' : s.upstream === 'connecting' ? 'connectant…' : 'sense connexió');
+
+  const lat = s?.latency?.translate, q = s?.config?.quality === 'millor' ? 'millor' : 'ràpida';
+  if (running && lat != null) chip('hcTr', lat < 1500 ? 'ok' : lat < 3000 ? 'warn' : 'bad', (lat / 1000).toFixed(1).replace('.', ',') + ' s · ' + q);
+  else chip('hcTr', '', q);
+
+  // Un servidor d'abans de la 2.7.0 no diu quantes pantalles hi ha: el tram no surt
+  $('hcScr').hidden = typeof s?.screens !== 'number';
+  if (typeof s?.screens === 'number') {
+    if (s.display?.hidden) chip('hcScr', 'warn', 'AMAGADA');
+    else if (!s.screens) chip('hcScr', running ? 'warn' : '', 'cap de connectada');
+    else chip('hcScr', 'ok', s.screens === 1 ? '1 connectada' : `${s.screens} connectades`);
+  }
+
+  if (running && s?.lastText) {
+    const ago = Math.max(0, Math.round((s.now - s.lastText + (now - lastMsgAt)) / 1000));
+    chip('hcTxt', ago < 20 ? 'ok' : '', ago < 60 ? `fa ${ago} s` : `fa ${Math.floor(ago / 60)} min`);
+  } else chip('hcTxt', '', '—');
+}
+setInterval(() => { health(); chain(); }, 500);
 setInterval(() => {
   if (!running || !startedAt) return;
-  const t = Math.floor((Date.now() - startedAt) / 1000);
-  $('timer').textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  const t = Math.floor((Date.now() - startedAt) / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+  // Amb hores a partir de la primera (abans, a l'hora i quart hi deia «75:03»)
+  $('timer').textContent = (h ? `${h}:${String(m).padStart(2, '0')}` : String(m)) + `:${String(t % 60).padStart(2, '0')}`;
 }, 500);
 
 // ─── Transcripció ───
 let logPinned = true;
 $('log').addEventListener('scroll', () => { const l = $('log'); logPinned = l.scrollHeight - l.scrollTop - l.clientHeight < 40; });
-let logRq = 0;
+let logRq = 0, logSig = '';
+const LOG_EMPTY = $('log').innerHTML;
+function emptyLog() { blocks.clear(); logSig = ''; $('log').innerHTML = running ? '' : LOG_EMPTY; }
 function renderLog() { if (logRq) return; logRq = requestAnimationFrame(() => { logRq = 0; renderLogNow(); }); }
 function renderLogNow() {
   if (blocks.size > 3000) { const ids = [...blocks.keys()].sort((a, b) => a - b); for (const id of ids.slice(0, blocks.size - 2000)) blocks.delete(id); }
   const list = [...blocks.values()].sort((a, b) => a.id - b.id).slice(-150);
   if (!list.length) return;
   const el = $('log');
+  const sig = JSON.stringify([list.map((b) => [b.id, b.src, b.tr, b.final, b.speaker]), prefs.targets, prefs.speakers.map((x) => x.name)]);
+  if (sig === logSig) return;
+  logSig = sig;
   el.innerHTML = list.map((b) => {
     const idx = prefs.speakers.findIndex((s) => s.name === b.speaker);
     const c = COLORS[(idx < 0 ? 0 : idx) % COLORS.length];
@@ -495,7 +574,7 @@ function renderLogNow() {
   }).join('');
   if (logPinned) el.scrollTop = el.scrollHeight;
 }
-$('clear').onclick = () => { send({ type: 'clear' }); blocks.clear(); $('log').innerHTML = ''; };
+$('clear').onclick = () => { send({ type: 'clear' }); emptyLog(); toast('Llista buidada i pantalla neta'); };
 $('download').onclick = () => {
   const list = [...blocks.values()].filter((b) => b.final).sort((a, b) => a.id - b.id);
   const txt = list.map((b) => `[${new Date(b.t0).toLocaleTimeString('ca-ES')}]${b.speaker ? ' ' + b.speaker + ':' : ''} ${b.src}\n` +
@@ -723,8 +802,7 @@ function startSending() {
   sendingSince = Date.now();
   send({ type: 'start', config: configPayload() });
   sendDisplay();
-  blocks.clear();
-  $('log').innerHTML = '';
+  emptyLog();
   sending = true;
 }
 function stopAll() {
@@ -947,6 +1025,18 @@ function renderQuality() {
 }
 $('quality').onclick = (e) => { const v = e.target.dataset.v; if (!v || v === prefs.quality) return; prefs.quality = v; window.qualityChangedAt = Date.now(); save('quality', v); renderQuality(); sendConfig(); toast(v === 'millor' ? 'Traducció MILLOR: frase acabada, model gran' : 'Traducció RÀPIDA'); };
 renderQuality();
+
+// ─── El valor de cada lliscador, al costat (abans s'ajustava a ull) ───
+function syncRanges() {
+  for (const inp of document.querySelectorAll('.toolbar input[type=range]')) {
+    let o = inp.nextElementSibling;
+    if (!o || o.tagName !== 'OUTPUT') { o = document.createElement('output'); inp.after(o); inp.addEventListener('input', syncRanges); }
+    const t = String(Number(inp.value)).replace('.', ',') + (inp.dataset.u || '');
+    if (o.textContent !== t) o.textContent = t;
+  }
+}
+$('areaReset').addEventListener('click', syncRanges);
+syncRanges();
 
 renderMode();
 renderLangs(); renderSwap();

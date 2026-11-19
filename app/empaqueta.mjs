@@ -26,7 +26,7 @@ const [out] = await packager({
   asar: false, // el servidor corre en un procés a part i llegeix public/ del disc: sense paquet asar
   prune: true,
   ignore: [
-    /^\/(dist|sessions|guio-[^/]+|\.git)(\/|$)/,
+    /^\/(dist|sessions|guio-[^/]+|\.git|\.claude)(\/|$)/,
     /^\/\.env$/, /^\/guio\.json$/, /^\/guio-revisio\.txt$/, /^\/ACTE-.*\.md$/,
     /^\/proves\/.*\.wav$/, /^\/app\/icona(\/|$)/, /^\/(prova|compara)\.mjs$/,
   ],

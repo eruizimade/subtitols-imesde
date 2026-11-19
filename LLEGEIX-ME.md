@@ -26,6 +26,27 @@ La manera recomanada d'usar-la. És el mateix servidor de sempre, embolcallat:
 
 Pla B: si l'app no arrenca, tanca-la i fes servir `npm run acte` com sempre (no poden anar alhora: el port és el mateix).
 
+## Instal·lar-la en un altre Mac
+
+Cal un Mac amb **Apple Silicon** (M1 o posterior) i internet. No cal instal·lar res més (ni Node ni Chrome).
+
+1. Ves a <https://github.com/eruizimade/subtitols-imesde/releases/latest> i baixa
+   **`Subtitols-IMESDE-X.Y.Z-mac.zip`** (l'app sencera; el `codi-…zip` no: aquest és per a les actualitzacions).
+2. Descomprimeix-lo i arrossega **Subtítols IMESDE** a **Aplicacions**.
+3. El primer cop macOS no la deixa obrir (no està signada amb un compte d'Apple). Tria una de les dues:
+   - Obre-la, tanca l'avís, i ves a **Configuració del Sistema → Privadesa i seguretat → «Obrir igualment»**.
+   - O, al Terminal: `xattr -dr com.apple.quarantine "/Applications/Subtítols IMESDE.app"`
+4. En obrir-se demana la **clau d'OpenAI** (s'enganxa un sol cop i queda xifrada al Clauer d'aquell Mac) i
+   permís per al **micròfon** (cal dir que sí; també serveix per a la taula de so).
+
+El que **no** viatja amb l'app i cal tornar a posar si es vol: la clau, el guió (`guio.json`, menú Guió →
+Carregar guió…), les tipografies pròpies (carpeta `fonts` de la carpeta de dades) i els ajustos del panell
+(idiomes, ponents, aspecte de la pantalla). A partir d'aquí s'actualitza sola (vegeu «Actualitzacions»).
+
+Sense l'app (qualsevol Mac, també Intel): `git clone` del repositori, `npm install`, un `.env` amb
+`OPENAI_API_KEY=sk-…` i `npm run acte`; el panell s'obre amb **Chrome** a `http://localhost:4321/captura`.
+La captura multicanal nativa, a més, demana `npm run nadiu` (cal tenir les eines d'Xcode).
+
 ## Multicanal (fins a 8 ponents o més)
 
 Chrome (i per tant el panell) només captura **2 canals** de qualsevol targeta. Per a més canals, a
@@ -84,14 +105,23 @@ sola a l'anterior (i al menú hi ha «Tornar a la versió anterior»).
 - **Targeta desendollada**: alarma vermella i la torna a obrir quan torna.
 - **OpenAI talla cada sessió als 60 minuts**: es renova sola cap als 50, aprofitant una pausa, i
   l'àudio de mentre es reconnecta es guarda i no es perd.
+- **Connexió amb OpenAI morta sense tancar-se** (la Wi-Fi del recinte es penja): es detecta en 15 s encara
+  que ningú no parli, es refà sola i, si no hi ha internet, el panell ho diu en vermell.
 - **Barra vermella al panell** = alguna cosa no va (diu què). **Taronja** = avís (p. ex. fa estona
   que no surt text: normal si sona música).
+- **La tira de sota la capçalera** diu, en calma, com està cada tram: **Entrada → OpenAI → Traducció →
+  Pantalla** (quantes pantalles del públic hi ha connectades de debò) i quant fa de l'últim text.
+  Verd = bé, taronja = mira-t'ho, vermell = trencat.
+- **L'enregistrament** de la sessió (`sessions/*.wav`) es pot obrir encara que el Mac s'apagui a mitja
+  sessió; i si queda menys d'1 GB al disc, no es desa (els subtítols van igual).
 - Aturar demana **dos clics**.
 - **Música llarga o descans**: botó **«Pantalla visible / AMAGADA»** de la capçalera (o «amagar pantalla» a «05 Pantalla»): el sistema segueix
   escoltant, però al públic no li surt res (la música fa que el model s'inventi text). Desmarca-ho
   quan torni a parlar algú. Mentre està amagada, el panell té una barra taronja que ho recorda.
 - **Si recarregues el panell**: prem **«Continuar aquí ▶»** de seguida (sense això no s'envia àudio).
   No premis «Començar»: començaria una sessió nova.
+- Proves sense clau, sense internet i sense cost: `npm run simulador` fa d'OpenAI en aquest ordinador
+  (les instruccions són a dalt de `proves/simulador.mjs`; també simula talls i connexions mortes).
 - Prova de resistència sense acte: `npm run resistencia -- 70 sessions/<un>.wav --silenci-cada=10 --silenci-min=4 --talla-panell-cada=15`
 
 ## Guió de l'acte (parts guionitzades)
@@ -133,7 +163,10 @@ sortirà). Cal el guió carregat.
    - http://localhost:4321/pantalla — el que es projecta (doble clic = pantalla completa)
 
 La pantalla es pot obrir des d'un altre ordinador de la mateixa xarxa canviant
-`localhost` per la IP d'aquest Mac.
+`localhost` per la IP d'aquest Mac. El **panell**, en canvi, només s'obre des de l'ordinador on corre el
+servidor (ningú de la xarxa del recinte no pot aturar la sessió); si mai cal manar-lo des d'un altre
+ordinador, `PANELL_REMOT=1` al `.env` (a l'app: un fitxer `.env` amb aquesta línia a la carpeta de dades,
+menú → «Obrir la carpeta de dades», i tornar a obrir l'app).
 
 ## Modes de transcripció (al panell)
 
@@ -160,6 +193,7 @@ ROTATE_MIN=50                  # renova la sessió d'OpenAI (que en talla als 60
 COMMIT_PAUSE_MS=600            # pausa que tanca un tros cap a OpenAI (0 = no)
 GUIO=altre.json                # un altre fitxer de guió
 PORT=4321
+PANELL_REMOT=1                 # deixa obrir el panell des d'un altre ordinador de la xarxa
 ```
 
 ## Registre

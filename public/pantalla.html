@@ -586,7 +586,7 @@
 
   applyCfg(null);
   function connect() {
-    const ws = new WebSocket(`ws://${location.host}/ws/pantalla`);
+    const ws = new WebSocket(`ws://${location.host}/ws/pantalla${q.get('embed') ? '?embed=1' : ''}`); // la vista prèvia del panell no compta com a pantalla
     ws.onopen = () => { connected = true; lastMsgAt = Date.now(); };
     ws.onmessage = (e) => {
       let msg;
