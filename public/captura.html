@@ -1072,7 +1072,7 @@ function syncLink(s) {
   $('linkHint').textContent =
     L.state === 'error' ? `No s’està emetent: ${L.error}. Es reintenta sol i la sala no en queda afectada.`
     : L.state === 'ok' ? `Emetent en ${lang.toLowerCase()}${L.viewers != null ? ` · ${L.viewers} ${L.viewers === 1 ? 'persona mirant' : 'persones mirant'}` : ''}.${(s.config?.targets || []).includes(L.lang) ? '' : ' Aquest idioma es tradueix només per a l’enllaç.'}`
-    : L.state === 'ready' ? `A punt: emetrà en ${lang.toLowerCase()} quan comenci la sessió.`
+    : L.state === 'ready' ? `A punt: emetrà en ${lang.toLowerCase()} quan comenci la sessió. El que es digui en una altra llengua s’hi tradueix; el que es digui en ${lang.toLowerCase()} hi arriba tal com s’ha dit.`
     : 'Apagat: qui obri l’adreça hi llegirà que ara no hi ha subtítols en directe.';
 }
 function onLinkResult(m) {

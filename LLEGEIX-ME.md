@@ -52,7 +52,9 @@ La captura multicanal nativa, a més, demana `npm run nadiu` (cal tenir les eine
 Targeta **«07 Enllaç públic»** del panell. Algú obre `https://preview.imesde.app/subtitolsXXXXXXXX` (de moment
 a l'entorn de proves de l'agenda; més endavant, a `imesde.app`) (al mòbil, des de
 casa, des d'una cabina) i hi llegeix els subtítols **en l'idioma que tries al panell per a aquell enllaç**,
-encara que aquell idioma no surti a la pantalla de la sala. L'adreça és sempre la mateixa.
+encara que aquell idioma no surti a la pantalla de la sala. Si tries anglès: el que es digui en una altra
+llengua li arriba traduït a l'anglès, i el que es digui en anglès li arriba tal com s'ha dit, sense traduir.
+L'adreça és sempre la mateixa.
 
 1. Un administrador genera a preview.imesde.app una **clau d'emissió** (un sol cop).
 2. S'enganxa a la targeta 07 → «Desar la clau». El panell ensenya l'adreça pública (clic per copiar-la).

@@ -67,6 +67,8 @@ ho arregla.
 - Un bloc amb `final: false` és la frase que s'està dient: el seu `text` canvia a cada enviament (normalment
   creix; de tant en tant es reescriu). Quan passa a `final: true` encara pot canviar un cop (la traducció
   definitiva). El `id` és estable dins d'un mateix `boot`.
+- Si la frase s'ha dit en l'idioma de l'enllaç (`lang`), `text` és la transcripció original; si s'ha dit en una
+  altra llengua, la traducció. Per a la pàgina és indiferent: sempre és text en `lang`.
 - `speaker` pot ser `null`.
 - Les frases velles **no s'esborren soles** de la llista: després d'un silenci llarg, les últimes 8 poden ser de
   fa minuts. La pàgina decideix què ensenya amb `now - tEnd` (la sala esborra el text al cap d'uns 8 s sense

@@ -885,7 +885,10 @@ function linkPayload(lang) {
   const out = [];
   for (const b of blocks) {
     if (b.hidden || b.t0 < state.screenClearAt || (!b.literal && ALIEN_SCRIPT.test(b.src || ''))) continue;
-    const text = String(b.tr?.[lang] || (spokenLang(b) === lang ? b.src : '') || '').trim();
+    // Si la frase s'ha dit en l'idioma de l'enllaç, hi van les paraules ORIGINALS, no una versió passada pel
+    // traductor; només es tradueix el que s'ha dit en una altra llengua. (Amb «Es parla en» o l'idioma del
+    // ponent fixats ni tan sols es crida el traductor; en automàtic, l'idioma se sap comparant amb les traduccions.)
+    const text = String((spokenLang(b) === lang ? b.src : '') || b.tr?.[lang] || '').trim();
     if (text) out.push({ id: b.id, text: text.slice(0, 600), final: !!b.final, t0: b.t0, tEnd: b.tEnd, speaker: b.speaker || null });
   }
   return { running: state.running, hidden: !!state.display?.hidden || !state.listening, clearAt: state.screenClearAt || 0, blocks: out.slice(-8) };
