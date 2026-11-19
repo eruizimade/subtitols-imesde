@@ -246,6 +246,7 @@
     <span class="hc" id="hcAi" title="La connexió amb OpenAI, que fa la transcripció"><i></i><b>OpenAI</b><span>—</span></span>
     <span class="hc" id="hcTr" title="Quant triga a sortir la primera paraula de cada traducció"><i></i><b>Traducció</b><span>—</span></span>
     <span class="hc" id="hcScr" title="Pantalles del públic connectades ara mateix (la vista prèvia d’aquest panell no compta)"><i></i><b>Pantalla</b><span>—</span></span>
+    <span class="hc" id="hcLink" hidden title="L’enllaç públic (imesde.app/subtitols…): el que veu qui el segueix des de fora"><i></i><b>Enllaç</b><span>—</span></span>
     <span class="hc push" id="hcTxt" title="Quant fa que s’ha transcrit l’última paraula"><i></i><b>Últim text</b><span>—</span></span>
   </div>
 </header>
@@ -299,6 +300,23 @@
       <div class="speakers" id="speakers"></div>
       <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" id="addSp">+ Afegir ponent</button></div>
       <p class="hint">Cada ponent al seu micro (canal de la targeta). El sistema escolta qui parla més fort i n'escriu el nom. Sense ponents, es barreja tot. L’idioma ajuda la transcripció i la traducció (si algú canvia de llengua, es tradueix igual).</p>
+    </section>
+
+    <section class="card" id="linkCard" hidden>
+      <h2 class="kicker"><span class="n">07</span> Enllaç públic <span class="right" id="linkState"></span></h2>
+      <div id="linkSetup">
+        <p class="hint" style="margin:0 0 14px">Perquè algú segueixi els subtítols des de fora (amb el mòbil, des de casa, des d’una cabina), en el seu idioma, a <b>imesde.app/subtitols…</b> Cal una <b>clau d’emissió</b>: la genera un administrador a imesde.app i s’enganxa aquí un sol cop.</p>
+        <label class="f">Clau d’emissió <input type="text" id="linkKey" autocomplete="off" spellcheck="false" placeholder="Enganxa-la aquí"></label>
+        <button class="btn btn-ghost btn-sm" id="linkSave">Desar la clau</button>
+      </div>
+      <div id="linkReady" hidden>
+        <label class="switch"><input type="checkbox" id="linkOn"><span></span><b>emetre a l’enllaç</b></label>
+        <div class="urls" style="margin-top:12px"><code id="linkUrl" title="Copiar l’adreça"></code></div>
+        <label class="f" style="margin-top:14px">Idioma per a qui el mira</label>
+        <div class="chips" id="linkLang" style="margin-top:-6px"></div>
+        <p class="hint" id="linkHint"></p>
+        <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" id="linkForget" title="Aquest ordinador deixa de poder emetre a l’enllaç fins que s’hi torni a enganxar una clau">Treure la clau</button></div>
+      </div>
     </section>
   </div>
 
@@ -403,7 +421,7 @@ function connect() {
   // En connectar NO s'envia res: si hi ha una sessió en marxa (o un altre panell obert),
   // obrir aquesta pestanya no li ha de canviar la configuració. Només s'envia si no hi ha res.
   ws.onopen = () => { firstState = true; connected = true; lastMsgAt = Date.now(); };
-  ws.onmessage = (e) => { lastMsgAt = Date.now(); try { onState(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+  ws.onmessage = (e) => { lastMsgAt = Date.now(); try { const m = JSON.parse(e.data); if (m.type === 'linkResult') onLinkResult(m); else onState(m); } catch (err) { console.error(err); } };
   ws.onclose = () => { connected = false; setTimeout(connect, 1000); };
   ws.onerror = () => {};
 }
@@ -444,6 +462,7 @@ function onState(s) {
   // La traducció que s'aplica és la del SERVIDOR: si s'ha reiniciat (actualització), torna a «Ràpida» i el panell ho ha de dir
   if (s.config?.quality && s.config.quality !== prefs.quality && Date.now() - (window.qualityChangedAt || 0) > 2000) { prefs.quality = s.config.quality; save('quality', prefs.quality); renderQuality(); }
   syncLiteral(s);
+  syncLink(s);
   if (s.native?.active) {
     if (s.native.lastAt) lastFrameAt = performance.now() - Math.max(0, s.now - s.native.lastAt);
     const lv = s.native.levels || [];
@@ -533,6 +552,13 @@ function chain() {
     if (s.display?.hidden) chip('hcScr', 'warn', 'AMAGADA');
     else if (!s.screens) chip('hcScr', running ? 'warn' : '', 'cap de connectada');
     else chip('hcScr', 'ok', s.screens === 1 ? '1 connectada' : `${s.screens} connectades`);
+  }
+
+  const L = s?.link;
+  $('hcLink').hidden = !(L?.configured && L.on);
+  if (L?.configured && L.on) {
+    const who = L.lang.toUpperCase() + (L.viewers != null ? ` · ${L.viewers} mirant` : '');
+    chip('hcLink', L.state === 'ok' ? 'ok' : L.state === 'error' ? 'bad' : '', L.state === 'ok' ? `emetent · ${who}` : L.state === 'error' ? 'no emet' : `a punt · ${L.lang.toUpperCase()}`);
   }
 
   if (running && s?.lastText) {
@@ -1025,6 +1051,51 @@ function renderQuality() {
 }
 $('quality').onclick = (e) => { const v = e.target.dataset.v; if (!v || v === prefs.quality) return; prefs.quality = v; window.qualityChangedAt = Date.now(); save('quality', v); renderQuality(); sendConfig(); toast(v === 'millor' ? 'Traducció MILLOR: frase acabada, model gran' : 'Traducció RÀPIDA'); };
 renderQuality();
+
+// ─── Enllaç públic (imesde.app/subtitols…): la clau i els ajustos viuen al servidor, no en aquest navegador ───
+let linkSig = '';
+function syncLink(s) {
+  const L = s.link;
+  $('linkCard').hidden = !L; // un servidor d'abans de la 2.8.0 no en sap res
+  if (!L) return;
+  const sig = JSON.stringify([L, s.config?.targets, s.running]);
+  if (sig === linkSig) return;
+  linkSig = sig;
+  $('linkSetup').hidden = L.configured;
+  $('linkReady').hidden = !L.configured;
+  $('linkOn').checked = !!L.on;
+  $('linkUrl').textContent = L.url || '';
+  $('linkLang').innerHTML = Object.entries(LANGS).map(([k, v]) => `<button class="chip ${L.lang === k ? 'on' : ''}" data-v="${k}">${v}</button>`).join('');
+  $('linkState').textContent = !L.configured ? '' : { off: 'apagat', ready: 'a punt', ok: 'emetent', error: 'no emet' }[L.state] || '';
+  const lang = LANGS[L.lang] || L.lang;
+  $('linkHint').textContent =
+    L.state === 'error' ? `No s’està emetent: ${L.error}. Es reintenta sol i la sala no en queda afectada.`
+    : L.state === 'ok' ? `Emetent en ${lang.toLowerCase()}${L.viewers != null ? ` · ${L.viewers} ${L.viewers === 1 ? 'persona mirant' : 'persones mirant'}` : ''}.${(s.config?.targets || []).includes(L.lang) ? '' : ' Aquest idioma es tradueix només per a l’enllaç.'}`
+    : L.state === 'ready' ? `A punt: emetrà en ${lang.toLowerCase()} quan comenci la sessió.`
+    : 'Apagat: qui obri l’adreça hi llegirà que ara no hi ha subtítols en directe.';
+}
+function onLinkResult(m) {
+  $('linkSave').disabled = false;
+  if (m.ok) $('linkKey').value = '';
+  toast(m.ok ? m.msg : 'No s’ha pogut desar la clau: ' + m.msg);
+}
+$('linkSave').onclick = () => {
+  const clau = $('linkKey').value.trim();
+  if (!clau) return toast('Enganxa primer la clau d’emissió.');
+  $('linkSave').disabled = true;
+  setTimeout(() => { $('linkSave').disabled = false; }, 8000); // per si la resposta no arriba
+  send({ type: 'link', op: 'key', clau });
+};
+$('linkKey').onkeydown = (e) => { if (e.key === 'Enter') $('linkSave').click(); };
+$('linkOn').onchange = () => { send({ type: 'link', on: $('linkOn').checked }); toast($('linkOn').checked ? 'Enllaç públic encès' : 'Enllaç públic apagat'); };
+$('linkLang').onclick = (e) => { const v = e.target.dataset.v; if (v) { send({ type: 'link', lang: v }); toast(`Enllaç públic en ${(LANGS[v] || v).toLowerCase()}`); } };
+$('linkUrl').onclick = () => { navigator.clipboard.writeText($('linkUrl').textContent); toast('Adreça copiada'); };
+let forgetArmedAt = 0;
+$('linkForget').onclick = () => {
+  if (Date.now() - forgetArmedAt < 3000) { forgetArmedAt = 0; $('linkForget').textContent = 'Treure la clau'; send({ type: 'link', op: 'forget' }); toast('Clau treta: l’enllaç ja no emet des d’aquest ordinador'); return; }
+  forgetArmedAt = Date.now(); $('linkForget').textContent = 'Segur? Clica per treure-la';
+  setTimeout(() => { if (forgetArmedAt) { forgetArmedAt = 0; $('linkForget').textContent = 'Treure la clau'; } }, 3100);
+};
 
 // ─── El valor de cada lliscador, al costat (abans s'ajustava a ull) ───
 function syncRanges() {

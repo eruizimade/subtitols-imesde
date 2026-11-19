@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createNative, listDevices } from './nadiu.mjs';
 import { createPrompter } from './prompter.mjs';
+import { createLink } from './enllac.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 // DATA_DIR: on viuen .env, guio.json i sessions/. Per defecte, aquesta carpeta (com sempre); l'app
@@ -112,6 +113,7 @@ function broadcast() {
   broadcastQueued = true;
   setTimeout(() => {
     broadcastQueued = false;
+    link.touch(); // l'enllaç públic mira si ha canviat res que hagi d'enviar
     const base = {
       type: 'state',
       running: state.running,
@@ -146,7 +148,8 @@ function broadcast() {
     for (const c of [...operators, ...displays]) {
       if (c.readyState !== WebSocket.OPEN || c.bufferedAmount > 2e6) continue; // un client penjat no acumula memòria
       // Cada panell sap si és ELL qui envia l'àudio (amb dos panells oberts, l'altre no ha de dir «en directe»)
-      c.send(operators.has(c) ? JSON.stringify({ ...base, you: c === audioOwner }) : shared);
+      // …i l'estat de l'enllaç públic només el veuen els panells (l'adreça no ha de córrer per la xarxa)
+      c.send(operators.has(c) ? JSON.stringify({ ...base, you: c === audioOwner, link: link.status }) : shared);
     }
   }, 30);
 }
@@ -369,7 +372,8 @@ function translateBlock(block) {
   const bi = blocks.indexOf(block), prevB = bi > 0 ? blocks[bi - 1] : null;
   const isCont = prevB && prevB.final && !prevB.hidden && prevB.src && !/[.!?…]["»”)]?\s*$/.test(prevB.src) && block.t0 - prevB.tEnd < 4000;
   // Tots els idiomes que poden sortir a la pantalla: els «Subtítols en» i els de la taula per idioma parlat
-  const langs = [...new Set([...state.config.targets, ...Object.values(state.config.showMap || {}).flat()])];
+  // …i el de l'enllaç públic, encara que a la sala no surti
+  const langs = [...new Set([...state.config.targets, ...Object.values(state.config.showMap || {}).flat(), ...(link.activeLang ? [link.activeLang] : [])])];
   for (const lang of langs) {
     if (srcL === lang || !/\p{L}/u.test(text)) { block.tr[lang] = text; continue; }
     const running = block.jobs[lang];
@@ -873,6 +877,29 @@ setInterval(() => {
 // Latit: l'estat surt com a mínim cada 2 s, perquè panell i pantalla detectin una connexió morta
 setInterval(broadcast, 2000);
 
+// ─── Enllaç públic (imesde.app/subtitolsXXXXXXXX): els subtítols en UN idioma, per a algú de fora ───
+// Vegeu enllac.mjs i docs/enllac-public.md. Què s'hi envia: les últimes frases que tenen text en aquell idioma,
+// amb els mateixos filtres que la pantalla de la sala (lectura literal, al·lucinacions, «Netejar pantalla»).
+const ALIEN_SCRIPT = /[\u0590-\u08FF\u0400-\u04FF\u0370-\u03FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F]/;
+function linkPayload(lang) {
+  const out = [];
+  for (const b of blocks) {
+    if (b.hidden || b.t0 < state.screenClearAt || (!b.literal && ALIEN_SCRIPT.test(b.src || ''))) continue;
+    const text = String(b.tr?.[lang] || (spokenLang(b) === lang ? b.src : '') || '').trim();
+    if (text) out.push({ id: b.id, text: text.slice(0, 600), final: !!b.final, t0: b.t0, tEnd: b.tEnd, speaker: b.speaker || null });
+  }
+  return { running: state.running, hidden: !!state.display?.hidden || !state.listening, clearAt: state.screenClearAt || 0, blocks: out.slice(-8) };
+}
+const link = createLink({
+  dataDir: DATA_DIR,
+  baseUrl: (process.env.ENLLAC_URL || 'https://www.imesde.app').replace(/\/+$/, ''),
+  bootId: BOOT_ID,
+  langs: Object.keys(LANG_NAMES),
+  payload: linkPayload,
+  onStatus: () => broadcast(),
+  log: (t) => console.log(t),
+});
+
 // ─── HTTP + WebSockets locals ───────────────────────────────────────────────
 function lanUrls() {
   return Object.values(os.networkInterfaces()).flat()
@@ -1023,6 +1050,17 @@ wss.on('connection', (ws, req) => {
         if (state.config.sourceLang !== srcBefore) pendingCfgRotate = Math.min(pendingCfgRotate, Date.now() - 17000);
       }
       broadcast();
+    }
+    else if (msg.type === 'link') {
+      // Enllaç públic: desar la clau (es comprova amb imesde.app), encendre/apagar, idioma, treure la clau
+      if (msg.op === 'key') link.setKey(msg.clau).then((r) => { try { ws.send(JSON.stringify({ type: 'linkResult', ...r })); } catch {} });
+      else if (msg.op === 'forget') link.forget();
+      else {
+        const before = link.activeLang;
+        link.set({ on: msg.on, lang: msg.lang });
+        // idioma nou a mitja sessió: les frases que ja hi ha a la vista no el tenen; la que es diu ara, sí
+        if (link.activeLang && link.activeLang !== before && open && state.config.quality !== 'millor') translateBlock(open);
+      }
     }
     else if (msg.type === 'display') { if (msg.display && typeof msg.display === 'object' && data.length < 20000) state.display = msg.display; broadcast(); }
     else if (msg.type === 'literal') {

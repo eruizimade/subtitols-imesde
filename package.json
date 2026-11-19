@@ -1,6 +1,6 @@
 {
   "name": "subtitols-imesde",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Subtítols en directe (OpenAI) · IMESDE",
   "main": "app/main.mjs",
   "scripts": {
@@ -10,6 +10,7 @@
     "acte": "caffeinate -dimsu node server.mjs",
     "resistencia": "node proves/resistencia.mjs",
     "simulador": "node proves/simulador.mjs",
+    "relleu": "node proves/relleu.mjs",
     "app": "electron .",
     "empaqueta": "node app/empaqueta.mjs",
     "publica": "node app/publica.mjs",
